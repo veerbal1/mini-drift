@@ -4,6 +4,7 @@ declare_id!("9ehbjawRhTfkRncCbVfSJDMKb2vZPtrA9vRzdf6EoVS5");
 
 pub mod math;
 pub mod error;
+pub mod state;
 
 #[program]
 pub mod mini_drift {
