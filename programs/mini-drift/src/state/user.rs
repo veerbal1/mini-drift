@@ -2,10 +2,16 @@
 
 use anchor_lang::prelude::*;
 
+use crate::error::ErrorCode;
+
 pub const MAX_PERP_POSITIONS: usize = 8;
 pub const MAX_ORDERS: usize = 16;
+pub const POSITION_FLAG_BEING_LIQUIDATED: u8 = 0b00000010;
+pub const POSITION_FLAG_BANKRUPT: u8 = 0b00000100;
 
-#[derive(AnchorSerialize, AnchorDeserialize, Default, Debug, PartialEq, Eq, Clone, Copy, InitSpace)]
+#[derive(
+    AnchorSerialize, AnchorDeserialize, Default, Debug, PartialEq, Eq, Clone, Copy, InitSpace,
+)]
 pub struct PerpPosition {
     /// Market like SOL-PERP, BTC-PERP
     pub market_index: u16,
@@ -28,10 +34,60 @@ pub struct PerpPosition {
 
     /// It will tell (count) number of OPEN (Unfilled Orders)
     pub open_orders: u8,
+
+    pub open_bids: i64,
+
+    pub open_asks: i64,
+
+    pub position_flag: u8,
+
+    pub isolated_position_scaled_balance: u64,
+}
+
+impl PerpPosition {
+    pub fn is_open_position(&self) -> bool {
+        // non-zero base means there is a live position.
+        self.base_asset_amount != 0
+    }
+
+    pub fn has_open_order(&self) -> bool {
+        self.open_orders != 0 || self.open_bids != 0 || self.open_asks != 0
+    }
+
+    pub fn has_unsettled_pnl(&self) -> bool {
+        self.base_asset_amount == 0 && self.quote_asset_amount != 0
+    }
+
+    pub fn is_being_liquidated(&self) -> bool {
+        self.position_flag & POSITION_FLAG_BEING_LIQUIDATED != 0
+            || self.position_flag & POSITION_FLAG_BANKRUPT != 0
+    }
+
+    pub fn is_available(&self) -> bool {
+        !self.is_open_position()
+            && !self.has_open_order()
+            && !self.has_unsettled_pnl()
+            && !self.is_being_liquidated()
+            && self.isolated_position_scaled_balance == 0
+    }
+
+    pub fn is_for(&self, market_index: u16) -> bool {
+        self.market_index == market_index && !self.is_available()
+    }
 }
 
 #[derive(
-    AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default, InitSpace
+    AnchorSerialize,
+    AnchorDeserialize,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Debug,
+    Default,
+    InitSpace,
 )]
 pub enum PositionDirection {
     #[default]
@@ -40,7 +96,17 @@ pub enum PositionDirection {
 }
 
 #[derive(
-    AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default, InitSpace
+    AnchorSerialize,
+    AnchorDeserialize,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Debug,
+    Default,
+    InitSpace,
 )]
 pub enum OrderType {
     Market,
@@ -56,7 +122,17 @@ pub enum OrderType {
 }
 
 #[derive(
-    AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default, InitSpace
+    AnchorSerialize,
+    AnchorDeserialize,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Debug,
+    Default,
+    InitSpace,
 )]
 pub enum OrderStatus {
     #[default]
@@ -66,7 +142,9 @@ pub enum OrderStatus {
     Canceled,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Debug, Eq, Default, Clone, Copy, InitSpace)]
+#[derive(
+    AnchorSerialize, AnchorDeserialize, PartialEq, Debug, Eq, Default, Clone, Copy, InitSpace,
+)]
 pub struct Order {
     pub order_id: u32,
     pub market_index: u16,
@@ -113,4 +191,33 @@ pub struct User {
 
 impl User {
     pub const LEN: usize = 8 + User::INIT_SPACE;
+
+    pub fn get_perp_position_index(&self, market_index: u16) -> Option<usize> {
+        self.perp_positions
+            .iter()
+            .position(|&position| position.is_for(market_index))
+    }
+
+    pub fn get_available_perp_position_index(&self) -> Option<usize> {
+        self.perp_positions
+            .iter()
+            .position(|&position| position.is_available())
+    }
+
+    pub fn get_available_order_index(&self) -> Option<usize> {
+        self.orders
+            .iter()
+            .position(|&order| order.status != OrderStatus::Open)
+    }
+
+    pub fn force_get_perp_position_index(&mut self, market_index: u16) -> Result<usize> {
+        let active_position_index = self.get_perp_position_index(market_index);
+
+        if let Some(index) = active_position_index {
+            return Ok(index);
+        } else {
+            //not exists
+            Ok(0 as usize)
+        }
+    }
 }
