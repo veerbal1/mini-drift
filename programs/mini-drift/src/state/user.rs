@@ -2,7 +2,7 @@
 
 use anchor_lang::prelude::*;
 
-use crate::error::ErrorCode;
+use crate::error::{ErrorCode, MiniDriftResult};
 
 pub const MAX_PERP_POSITIONS: usize = 8;
 pub const MAX_ORDERS: usize = 16;
@@ -210,14 +210,19 @@ impl User {
             .position(|&order| order.status != OrderStatus::Open)
     }
 
-    pub fn force_get_perp_position_index(&mut self, market_index: u16) -> Result<usize> {
+    pub fn force_get_perp_position_index(&mut self, market_index: u16) -> MiniDriftResult<usize> {
         let active_position_index = self.get_perp_position_index(market_index);
 
         if let Some(index) = active_position_index {
             return Ok(index);
         } else {
-            //not exists
-            Ok(0 as usize)
+            let available_free_index = self.get_available_perp_position_index();
+            if let Some(available_index) = available_free_index {
+                self.perp_positions[available_index].market_index = market_index;
+                Ok(available_index)
+            } else {
+                Err(ErrorCode::NoPerpPositionSlotAvailable)
+            }
         }
     }
 }
