@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use std::result::Result;
 
+#[derive(PartialEq)]
 #[error_code]
 pub enum ErrorCode {
     #[msg("Math Error")]

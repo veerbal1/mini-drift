@@ -226,3 +226,67 @@ impl User {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn force_get_perp_position_index_prefers_existing_market_position() {
+        let mut user = User::default();
+        const SOL_MARKET_INDEX: u16 = 0;
+        const BTC_MARKET_INDEX: u16 = 1;
+        user.perp_positions[0].base_asset_amount = 0;
+        user.perp_positions[0].market_index = BTC_MARKET_INDEX;
+        user.perp_positions[1].base_asset_amount = 10;
+        user.perp_positions[1].market_index = SOL_MARKET_INDEX;
+
+        let res = user
+            .force_get_perp_position_index(SOL_MARKET_INDEX)
+            .unwrap();
+        assert_eq!(res, 1);
+        assert_ne!(res, 0);
+    }
+
+    #[test]
+    fn force_get_perp_position_index_reuses_available_position() {
+        let mut user = User::default();
+        const SOL_MARKET_INDEX: u16 = 0;
+        const BTC_MARKET_INDEX: u16 = 1;
+        const ETH_MARKET_INDEX: u16 = 2;
+
+        user.perp_positions[0].base_asset_amount = 0;
+        user.perp_positions[0].market_index = BTC_MARKET_INDEX;
+        user.perp_positions[1].base_asset_amount = 10;
+        user.perp_positions[1].market_index = ETH_MARKET_INDEX;
+
+        // old SOL label is ignored if available; first free folder is reused.
+        user.perp_positions[2].base_asset_amount = 0;
+        user.perp_positions[2].market_index = SOL_MARKET_INDEX;
+
+        // Check if function pick index 0, because index 0 is free.
+        let res = user
+            .force_get_perp_position_index(SOL_MARKET_INDEX)
+            .unwrap();
+        assert_eq!(res, 0);
+        assert_ne!(res, 2);
+        assert_eq!(user.perp_positions[0].market_index, SOL_MARKET_INDEX);
+    }
+
+    #[test]
+    fn force_get_perp_position_index_errors_when_no_position_slot_available() {
+        let mut user = User::default();
+        const SOL_MARKET_INDEX: u16 = 0;
+        user.perp_positions
+            .iter_mut()
+            .enumerate()
+            .for_each(|(index, pos)| {
+                pos.market_index = index as u16 + 1;
+                pos.base_asset_amount = 1;
+            });
+
+        let res = user.force_get_perp_position_index(SOL_MARKET_INDEX);
+        let err = res.unwrap_err();
+        assert_eq!(err, ErrorCode::NoPerpPositionSlotAvailable);
+    }
+}
