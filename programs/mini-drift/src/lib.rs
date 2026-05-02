@@ -7,7 +7,7 @@ declare_id!("9ehbjawRhTfkRncCbVfSJDMKb2vZPtrA9vRzdf6EoVS5");
 pub mod error;
 pub mod math;
 pub mod state;
-
+pub mod controller;
 #[program]
 pub mod mini_drift {
     use super::*;
