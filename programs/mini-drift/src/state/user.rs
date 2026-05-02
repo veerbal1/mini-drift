@@ -229,6 +229,11 @@ impl User {
             }
         }
     }
+
+    pub fn force_get_available_order_index(&self) -> MiniDriftResult<usize> {
+        self.get_available_order_index()
+            .ok_or(ErrorCode::NoOrderSlotAvailable)
+    }
 }
 
 #[cfg(test)]
@@ -319,5 +324,17 @@ mod tests {
 
         let index = user.get_available_order_index();
         assert!(index.is_none());
+    }
+
+    #[test]
+    fn force_get_available_order_index_errors_when_no_order_slot_available() {
+        let mut user = User::default();
+
+        user.orders
+            .iter_mut()
+            .for_each(|order| order.status = OrderStatus::Open);
+
+        let err = user.force_get_available_order_index().unwrap_err();
+        assert_eq!(err, ErrorCode::NoOrderSlotAvailable);
     }
 }
