@@ -3,6 +3,7 @@
 use anchor_lang::prelude::*;
 
 use crate::error::{ErrorCode, MiniDriftResult};
+use crate::state::order_params::OrderParams;
 
 pub const MAX_PERP_POSITIONS: usize = 8;
 pub const MAX_ORDERS: usize = 16;
@@ -179,6 +180,30 @@ impl Order {
     pub fn is_available(&self) -> bool {
         self.status != OrderStatus::Open
     }
+
+    pub fn new_from_params(
+        params: OrderParams,
+        order_id: u32,
+        existing_position_direction: PositionDirection,
+    ) -> Self {
+        let mut order = Order::default();
+        order.order_type = params.order_type;
+        order.direction = params.direction;
+        order.base_asset_amount = params.base_asset_amount;
+        order.price = params.price;
+        order.market_index = params.market_index;
+        order.reduce_only = params.reduce_only;
+        order.post_only = params.post_only;
+        order.immediate_or_cancel = params.immediate_or_cancel;
+        order.max_ts = params.max_ts;
+
+        // Protocol level fields:
+        order.order_id = order_id;
+        order.status = OrderStatus::Open;
+        order.existing_position_direction = existing_position_direction;
+
+        order
+    }
 }
 
 #[account]
@@ -336,5 +361,36 @@ mod tests {
 
         let err = user.force_get_available_order_index().unwrap_err();
         assert_eq!(err, ErrorCode::NoOrderSlotAvailable);
+    }
+
+    #[test]
+    fn order_new_from_params_stores_params_and_protocol_fields() {
+        let order_params = OrderParams {
+            order_type: OrderType::Limit,
+            direction: PositionDirection::Long,
+            base_asset_amount: 10,
+            price: 100,
+            market_index: 2,
+            reduce_only: false,
+            post_only: true,
+            immediate_or_cancel: false,
+            max_ts: 12345,
+        };
+        let order = Order::new_from_params(order_params, 7, PositionDirection::Short);
+        assert_eq!(order.status, OrderStatus::Open);
+        assert_eq!(order.order_id, 7);
+        assert_eq!(order.existing_position_direction, PositionDirection::Short);
+        assert_eq!(order.base_asset_amount_filled, 0);
+        assert_eq!(order.quote_asset_amount_filled, 0);
+
+        assert_eq!(order.price, order_params.price);
+        assert_eq!(order.market_index, order_params.market_index);
+        assert_eq!(order.base_asset_amount, order_params.base_asset_amount);
+        assert_eq!(order.order_type, order_params.order_type);
+        assert_eq!(order.direction, order_params.direction);
+        assert_eq!(order.reduce_only, order_params.reduce_only);
+        assert_eq!(order.post_only, order_params.post_only);
+        assert_eq!(order.immediate_or_cancel, order_params.immediate_or_cancel);
+        assert_eq!(order.max_ts, order_params.max_ts);
     }
 }
