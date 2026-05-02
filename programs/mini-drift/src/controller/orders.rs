@@ -183,4 +183,38 @@ mod tests {
         assert_eq!(err, ErrorCode::NoOrderSlotAvailable);
         assert_eq!(user.perp_positions[0].market_index, 0);
     }
+
+    #[test]
+    fn place_perp_order_errors_when_no_position_slot_available() {
+        let mut user = User::default();
+
+        // Make every perp position unavailable.
+        // base_asset_amount != 0 => is_open_position() => is_available() == false
+        user.perp_positions
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, pos)| {
+                pos.market_index = (i as u16) + 1; // occupied by other markets
+                pos.base_asset_amount = 1; // simplest way to make slot unavailable
+            });
+
+        // Keep orders available (default statuses are non-Open).
+        let order_params = OrderParams {
+            order_type: OrderType::Limit, // pass order-type gate
+            direction: PositionDirection::Long,
+            base_asset_amount: 10,
+            price: 100,
+            market_index: 999, // "new" market not currently active
+            reduce_only: false,
+            post_only: false,
+            immediate_or_cancel: false,
+            max_ts: 100,
+        };
+
+        let res = place_perp_order(&mut user, order_params);
+        let err = res.unwrap_err();
+
+        assert_eq!(err, ErrorCode::NoPerpPositionSlotAvailable);
+        assert_eq!(user.orders[0].status, OrderStatus::Init);
+    }
 }
