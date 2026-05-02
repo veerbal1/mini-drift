@@ -175,6 +175,12 @@ pub struct Order {
     pub bit_flags: u8,
 }
 
+impl Order {
+    pub fn is_available(&self) -> bool {
+        self.status != OrderStatus::Open
+    }
+}
+
 #[account]
 #[derive(PartialEq, Debug, Eq, Default, InitSpace)]
 pub struct User {
@@ -205,9 +211,7 @@ impl User {
     }
 
     pub fn get_available_order_index(&self) -> Option<usize> {
-        self.orders
-            .iter()
-            .position(|&order| order.status != OrderStatus::Open)
+        self.orders.iter().position(|&order| order.is_available())
     }
 
     pub fn force_get_perp_position_index(&mut self, market_index: u16) -> MiniDriftResult<usize> {
@@ -288,5 +292,32 @@ mod tests {
         let res = user.force_get_perp_position_index(SOL_MARKET_INDEX);
         let err = res.unwrap_err();
         assert_eq!(err, ErrorCode::NoPerpPositionSlotAvailable);
+    }
+
+    // Test Order
+    #[test]
+    fn get_available_order_index_returns_first_non_open_order() {
+        let mut user = User::default();
+        user.orders[0].status = OrderStatus::Open;
+        user.orders[1].status = OrderStatus::Open;
+        user.orders[2].status = OrderStatus::Filled;
+        user.orders[3].status = OrderStatus::Canceled;
+
+        let index = user.get_available_order_index().unwrap();
+        assert_eq!(index, 2);
+        assert_ne!(index, 0);
+        assert_ne!(index, 1);
+    }
+
+    #[test]
+    fn get_available_order_index_returns_none_when_all_orders_open() {
+        let mut user = User::default();
+
+        user.orders
+            .iter_mut()
+            .for_each(|order| order.status = OrderStatus::Open);
+
+        let index = user.get_available_order_index();
+        assert!(index.is_none());
     }
 }
