@@ -128,4 +128,33 @@ mod tests {
         assert_eq!(user.perp_positions[0].open_asks, -10);
         assert_eq!(user.perp_positions[0].open_bids, 0);
     }
+
+    #[test]
+    fn place_perp_order_stores_existing_position_direction() {
+        let mut user = User::default();
+        user.perp_positions[0].market_index = 2;
+        user.perp_positions[0].base_asset_amount = -5;
+
+        let order_params = OrderParams {
+            order_type: OrderType::Limit,
+            direction: PositionDirection::Long,
+            base_asset_amount: 10,
+            price: 100,
+            market_index: 2,
+            reduce_only: false,
+            post_only: false,
+            immediate_or_cancel: false,
+            max_ts: 100,
+        };
+
+        let res = place_perp_order(&mut user, order_params);
+        assert!(res.is_ok());
+        assert_eq!(
+            user.orders[0].existing_position_direction,
+            PositionDirection::Short
+        );
+        assert_eq!(user.orders[0].market_index, 2);
+        assert_eq!(user.orders[0].status, OrderStatus::Open);
+        assert_eq!(user.next_order_id, 1);
+    }
 }
