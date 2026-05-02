@@ -14,8 +14,8 @@ pub fn place_perp_order(user: &mut User, order_params: OrderParams) -> MiniDrift
     if order_params.order_type != OrderType::Market && order_params.order_type != OrderType::Limit {
         return Err(ErrorCode::UnsupportedOrderType);
     }
-    let position_index = user.force_get_perp_position_index(order_params.market_index)?;
     let order_index = user.force_get_available_order_index()?;
+    let position_index = user.force_get_perp_position_index(order_params.market_index)?;
     let existing_position_direction = if user.perp_positions[position_index].base_asset_amount >= 0
     {
         PositionDirection::Long
@@ -156,5 +156,31 @@ mod tests {
         assert_eq!(user.orders[0].market_index, 2);
         assert_eq!(user.orders[0].status, OrderStatus::Open);
         assert_eq!(user.next_order_id, 1);
+    }
+
+    #[test]
+    fn place_perp_order_errors_when_no_order_slot_available() {
+        let mut user = User::default();
+
+        for order in user.orders.iter_mut() {
+            order.status = OrderStatus::Open;
+        }
+
+        let order_params = OrderParams {
+            order_type: OrderType::Limit,
+            direction: PositionDirection::Long,
+            base_asset_amount: 10,
+            price: 100,
+            market_index: 2,
+            reduce_only: false,
+            post_only: false,
+            immediate_or_cancel: false,
+            max_ts: 100,
+        };
+
+        let res = place_perp_order(&mut user, order_params);
+        let err = res.unwrap_err();
+        assert_eq!(err, ErrorCode::NoOrderSlotAvailable);
+        assert_eq!(user.perp_positions[0].market_index, 0);
     }
 }
