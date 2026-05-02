@@ -217,4 +217,28 @@ mod tests {
         assert_eq!(err, ErrorCode::NoPerpPositionSlotAvailable);
         assert_eq!(user.orders[0].status, OrderStatus::Init);
     }
+
+    #[test]
+    fn place_perp_order_stores_market_order() {
+        let mut user = User::default();
+
+        let order_params = OrderParams {
+            order_type: OrderType::Market,
+            direction: PositionDirection::Long,
+            base_asset_amount: 10,
+            price: 100,
+            market_index: 2,
+            reduce_only: false,
+            post_only: false,
+            immediate_or_cancel: false,
+            max_ts: 100,
+        };
+
+        let res = place_perp_order(&mut user, order_params);
+
+        assert!(res.is_ok());
+        assert_eq!(user.orders[0].order_type, OrderType::Market);
+        assert_eq!(user.orders[0].status, OrderStatus::Open);
+        assert_eq!(user.open_orders, 1);
+    }
 }
