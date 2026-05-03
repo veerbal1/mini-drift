@@ -1,15 +1,18 @@
-use anchor_lang::prelude::*;
-
+use crate::state::order_params::OrderParams;
 use crate::state::user::User;
-
+use anchor_lang::prelude::*;
+use instructions::*;
 declare_id!("9ehbjawRhTfkRncCbVfSJDMKb2vZPtrA9vRzdf6EoVS5");
 
+pub mod controller;
 pub mod error;
+pub mod instructions;
 pub mod math;
 pub mod state;
-pub mod controller;
+
 #[program]
 pub mod mini_drift {
+
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
@@ -22,6 +25,10 @@ pub mod mini_drift {
         user_account.authority = ctx.accounts.authority.key();
         user_account.next_order_id = 1;
         Ok(())
+    }
+
+    pub fn place_perp_order(ctx: Context<PlacePerpOrder>, order_params: OrderParams) -> Result<()> {
+        handle_place_perp_order(ctx, order_params)
     }
 }
 
