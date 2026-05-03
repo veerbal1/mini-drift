@@ -186,23 +186,21 @@ impl Order {
         order_id: u32,
         existing_position_direction: PositionDirection,
     ) -> Self {
-        let mut order = Order::default();
-        order.order_type = params.order_type;
-        order.direction = params.direction;
-        order.base_asset_amount = params.base_asset_amount;
-        order.price = params.price;
-        order.market_index = params.market_index;
-        order.reduce_only = params.reduce_only;
-        order.post_only = params.post_only;
-        order.immediate_or_cancel = params.immediate_or_cancel;
-        order.max_ts = params.max_ts;
-
-        // Protocol level fields:
-        order.order_id = order_id;
-        order.status = OrderStatus::Open;
-        order.existing_position_direction = existing_position_direction;
-
-        order
+        Order {
+            order_type: params.order_type,
+            direction: params.direction,
+            base_asset_amount: params.base_asset_amount,
+            price: params.price,
+            market_index: params.market_index,
+            reduce_only: params.reduce_only,
+            post_only: params.post_only,
+            immediate_or_cancel: params.immediate_or_cancel,
+            max_ts: params.max_ts,
+            order_id,
+            status: OrderStatus::Open,
+            existing_position_direction,
+            ..Order::default()
+        }
     }
 }
 
@@ -243,7 +241,7 @@ impl User {
         let active_position_index = self.get_perp_position_index(market_index);
 
         if let Some(index) = active_position_index {
-            return Ok(index);
+            Ok(index)
         } else {
             let available_free_index = self.get_available_perp_position_index();
             if let Some(available_index) = available_free_index {

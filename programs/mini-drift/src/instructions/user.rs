@@ -20,6 +20,6 @@ pub struct PlacePerpOrder<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    #[account(mut)]
+    #[account(mut, has_one = authority)]
     pub user: Account<'info, User>,
 }
