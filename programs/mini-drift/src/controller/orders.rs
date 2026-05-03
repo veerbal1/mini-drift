@@ -1,6 +1,9 @@
+use anchor_lang::prelude::*;
+
 use crate::controller::position::increase_open_bids_and_asks;
 use crate::error::ErrorCode;
 
+use crate::state::events::OrderRecord;
 use crate::state::user::OrderType;
 use crate::{
     error::MiniDriftResult,
@@ -10,7 +13,12 @@ use crate::{
     },
 };
 
-pub fn place_perp_order(user: &mut User, order_params: OrderParams) -> MiniDriftResult<()> {
+pub fn place_perp_order(
+    user: &mut User,
+    user_key: Pubkey,
+    order_params: OrderParams,
+    now: i64,
+) -> MiniDriftResult<()> {
     if order_params.order_type != OrderType::Market && order_params.order_type != OrderType::Limit {
         return Err(ErrorCode::UnsupportedOrderType);
     }
@@ -53,6 +61,7 @@ pub fn place_perp_order(user: &mut User, order_params: OrderParams) -> MiniDrift
         existing_position_direction,
     );
     user.orders[order_index] = new_order;
+
     user.next_order_id = user
         .next_order_id
         .checked_add(1)
@@ -72,6 +81,15 @@ pub fn place_perp_order(user: &mut User, order_params: OrderParams) -> MiniDrift
         &new_order.direction,
         new_order.base_asset_amount,
     )?;
+
+    // event
+    let record = OrderRecord {
+        ts: now,
+        user: user_key,
+        order: user.orders[order_index],
+    };
+
+    emit!(record);
     Ok(())
 }
 
@@ -96,7 +114,7 @@ mod tests {
             immediate_or_cancel: false,
             max_ts: 100,
         };
-        let res = place_perp_order(&mut user, order_params);
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
         let err = res.unwrap_err();
         assert_eq!(err, ErrorCode::UnsupportedOrderType);
         assert_eq!(user.open_orders, 0);
@@ -119,7 +137,7 @@ mod tests {
             max_ts: 100,
         };
 
-        let res = place_perp_order(&mut user, order_params);
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
         assert!(res.is_ok());
         assert_eq!(user.open_orders, 1);
         assert_eq!(user.orders[0].market_index, 2);
@@ -147,7 +165,7 @@ mod tests {
             max_ts: 100,
         };
 
-        let res = place_perp_order(&mut user, order_params);
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
         assert!(res.is_ok());
         assert_eq!(user.perp_positions[0].open_asks, -10);
         assert_eq!(user.perp_positions[0].open_bids, 0);
@@ -171,7 +189,7 @@ mod tests {
             max_ts: 100,
         };
 
-        let res = place_perp_order(&mut user, order_params);
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
         assert!(res.is_ok());
         assert_eq!(
             user.orders[0].existing_position_direction,
@@ -202,7 +220,7 @@ mod tests {
             max_ts: 100,
         };
 
-        let res = place_perp_order(&mut user, order_params);
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
         let err = res.unwrap_err();
         assert_eq!(err, ErrorCode::NoOrderSlotAvailable);
         assert_eq!(user.perp_positions[0].market_index, 0);
@@ -235,7 +253,7 @@ mod tests {
             max_ts: 100,
         };
 
-        let res = place_perp_order(&mut user, order_params);
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
         let err = res.unwrap_err();
 
         assert_eq!(err, ErrorCode::NoPerpPositionSlotAvailable);
@@ -258,7 +276,7 @@ mod tests {
             max_ts: 100,
         };
 
-        let res = place_perp_order(&mut user, order_params);
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
 
         assert!(res.is_ok());
         assert_eq!(user.orders[0].order_type, OrderType::Market);
@@ -280,7 +298,7 @@ mod tests {
             immediate_or_cancel: false,
             max_ts: 100,
         };
-        let res = place_perp_order(&mut user, order_params);
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
         let err = res.unwrap_err();
         assert_eq!(err, ErrorCode::ReduceOnlyOrderWouldIncreasePosition);
     }
@@ -304,7 +322,7 @@ mod tests {
             max_ts: 100,
         };
 
-        let res2 = place_perp_order(&mut user, order_params2);
+        let res2 = place_perp_order(&mut user, Pubkey::default(), order_params2, 0);
         let err = res2.unwrap_err();
         assert_eq!(err, ErrorCode::ReduceOnlyOrderWouldIncreasePosition);
     }
@@ -328,7 +346,7 @@ mod tests {
             max_ts: 100,
         };
 
-        let res2 = place_perp_order(&mut user, order_params2);
+        let res2 = place_perp_order(&mut user, Pubkey::default(), order_params2, 0);
         assert!(res2.is_ok());
         assert!(user.orders[0].reduce_only);
         assert_eq!(user.perp_positions[0].base_asset_amount, 10);
@@ -350,7 +368,7 @@ mod tests {
             max_ts: 100,
         };
 
-        let res = place_perp_order(&mut user, order_params).unwrap_err();
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0).unwrap_err();
         assert_eq!(res, ErrorCode::UnsupportedOrderType);
         assert_eq!(user.open_orders, 0);
         assert_eq!(user.orders[0].status, OrderStatus::Init);
@@ -372,7 +390,7 @@ mod tests {
             max_ts: 100,
         };
 
-        let res = place_perp_order(&mut user, order_params).unwrap_err();
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0).unwrap_err();
         assert_eq!(res, ErrorCode::UnsupportedOrderType);
         assert_eq!(user.open_orders, 0);
         assert_eq!(user.orders[0].status, OrderStatus::Init);
