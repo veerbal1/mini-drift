@@ -14,6 +14,30 @@ pub fn place_perp_order(user: &mut User, order_params: OrderParams) -> MiniDrift
     if order_params.order_type != OrderType::Market && order_params.order_type != OrderType::Limit {
         return Err(ErrorCode::UnsupportedOrderType);
     }
+
+    if order_params.reduce_only {
+        let existing_position_index = user
+            .get_perp_position_index(order_params.market_index)
+            .ok_or(ErrorCode::ReduceOnlyOrderWouldIncreasePosition)?;
+
+        let existing_position_base_amount =
+            user.perp_positions[existing_position_index].base_asset_amount;
+
+        if existing_position_base_amount == 0 {
+            return Err(ErrorCode::ReduceOnlyOrderWouldIncreasePosition);
+        }
+
+        let existing_position_direction = if existing_position_base_amount > 0 {
+            PositionDirection::Long
+        } else {
+            PositionDirection::Short
+        };
+
+        if order_params.direction == existing_position_direction {
+            return Err(ErrorCode::ReduceOnlyOrderWouldIncreasePosition);
+        }
+    }
+
     let order_index = user.force_get_available_order_index()?;
     let position_index = user.force_get_perp_position_index(order_params.market_index)?;
     let existing_position_direction = if user.perp_positions[position_index].base_asset_amount >= 0
@@ -240,5 +264,73 @@ mod tests {
         assert_eq!(user.orders[0].order_type, OrderType::Market);
         assert_eq!(user.orders[0].status, OrderStatus::Open);
         assert_eq!(user.open_orders, 1);
+    }
+
+    #[test]
+    fn place_perp_order_rejects_reduce_only_without_position() {
+        let mut user = User::default();
+        let order_params = OrderParams {
+            order_type: OrderType::Market,
+            direction: PositionDirection::Long,
+            base_asset_amount: 10,
+            price: 100,
+            market_index: 2,
+            reduce_only: true,
+            post_only: false,
+            immediate_or_cancel: false,
+            max_ts: 100,
+        };
+        let res = place_perp_order(&mut user, order_params);
+        let err = res.unwrap_err();
+        assert_eq!(err, ErrorCode::ReduceOnlyOrderWouldIncreasePosition);
+    }
+
+    #[test]
+    fn place_perp_order_rejects_reduce_only_with_position_in_same_direction() {
+        let mut user = User::default();
+        user.perp_positions[0].base_asset_amount = 10;
+        user.perp_positions[0].market_index = 2;
+
+        // Order 2: reduce only
+        let order_params2 = OrderParams {
+            order_type: OrderType::Market,
+            direction: PositionDirection::Long,
+            base_asset_amount: 5,
+            price: 100,
+            market_index: 2,
+            reduce_only: true,
+            post_only: false,
+            immediate_or_cancel: false,
+            max_ts: 100,
+        };
+
+        let res2 = place_perp_order(&mut user, order_params2);
+        let err = res2.unwrap_err();
+        assert_eq!(err, ErrorCode::ReduceOnlyOrderWouldIncreasePosition);
+    }
+
+    #[test]
+    fn place_perp_order_passes_reduce_only_with_position_in_opp_direction() {
+        let mut user = User::default();
+        user.perp_positions[0].base_asset_amount = 10;
+        user.perp_positions[0].market_index = 2;
+
+        // Order 2: reduce only
+        let order_params2 = OrderParams {
+            order_type: OrderType::Market,
+            direction: PositionDirection::Short,
+            base_asset_amount: 5,
+            price: 100,
+            market_index: 2,
+            reduce_only: true,
+            post_only: false,
+            immediate_or_cancel: false,
+            max_ts: 100,
+        };
+
+        let res2 = place_perp_order(&mut user, order_params2);
+        assert!(res2.is_ok());
+        assert!(user.orders[0].reduce_only);
+        assert_eq!(user.perp_positions[0].base_asset_amount, 10);
     }
 }
