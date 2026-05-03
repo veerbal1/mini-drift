@@ -333,4 +333,48 @@ mod tests {
         assert!(user.orders[0].reduce_only);
         assert_eq!(user.perp_positions[0].base_asset_amount, 10);
     }
+
+    #[test]
+    fn place_perp_order_rejects_trigger_market_order() {
+        let mut user = User::default();
+
+        let order_params = OrderParams {
+            order_type: OrderType::TriggerMarket,
+            direction: PositionDirection::Short,
+            base_asset_amount: 5,
+            price: 100,
+            market_index: 2,
+            reduce_only: false,
+            post_only: false,
+            immediate_or_cancel: false,
+            max_ts: 100,
+        };
+
+        let res = place_perp_order(&mut user, order_params).unwrap_err();
+        assert_eq!(res, ErrorCode::UnsupportedOrderType);
+        assert_eq!(user.open_orders, 0);
+        assert_eq!(user.orders[0].status, OrderStatus::Init);
+    }
+
+    #[test]
+    fn place_perp_order_rejects_trigger_limit_order() {
+        let mut user = User::default();
+
+        let order_params = OrderParams {
+            order_type: OrderType::TriggerLimit,
+            direction: PositionDirection::Short,
+            base_asset_amount: 5,
+            price: 100,
+            market_index: 2,
+            reduce_only: false,
+            post_only: false,
+            immediate_or_cancel: false,
+            max_ts: 100,
+        };
+
+        let res = place_perp_order(&mut user, order_params).unwrap_err();
+        assert_eq!(res, ErrorCode::UnsupportedOrderType);
+        assert_eq!(user.open_orders, 0);
+        assert_eq!(user.orders[0].status, OrderStatus::Init);
+    }
 }
