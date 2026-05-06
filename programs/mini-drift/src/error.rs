@@ -18,6 +18,9 @@ pub enum ErrorCode {
 
     #[msg("Unsupported order type")]
     UnsupportedOrderType,
+
+    #[msg("Unexpected Error")]
+    UnexpectedError,
 }
 
 pub type MiniDriftResult<T = ()> = Result<T, ErrorCode>;

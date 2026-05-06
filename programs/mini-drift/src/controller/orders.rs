@@ -1,3 +1,4 @@
+use crate::state::user::OrderStatus;
 use anchor_lang::prelude::*;
 
 use crate::controller::position::increase_open_bids_and_asks;
@@ -93,9 +94,32 @@ pub fn place_perp_order(
     Ok(())
 }
 
+pub fn update_order_after_fill(
+    order: &mut Order,
+    base_asset_amount: u64,
+    quote_asset_amount: u64,
+) -> MiniDriftResult<bool> {
+    order.base_asset_amount_filled = order
+        .base_asset_amount_filled
+        .checked_add(base_asset_amount)
+        .ok_or(ErrorCode::MathError)?;
+
+    order.quote_asset_amount_filled = order
+        .quote_asset_amount_filled
+        .checked_add(quote_asset_amount)
+        .ok_or(ErrorCode::MathError)?;
+
+    let base_asset_amount_unfilled = order.get_base_asset_amount_unfilled(None)?;
+    if base_asset_amount_unfilled == 0 {
+        order.status = OrderStatus::Filled;
+        return Ok(true);
+    } else {
+        Ok(false)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::state::user::OrderStatus;
 
     use super::*;
 
@@ -395,4 +419,65 @@ mod tests {
         assert_eq!(user.open_orders, 0);
         assert_eq!(user.orders[0].status, OrderStatus::Init);
     }
+
+    #[test]
+    fn update_order_after_fill_updates_progress_and_keeps_order_open() {
+        let mut user = User::default();
+        let order_params = OrderParams {
+            order_type: OrderType::Market,
+            direction: PositionDirection::Short,
+            base_asset_amount: 5,
+            price: 100,
+            market_index: 2,
+            reduce_only: false,
+            post_only: false,
+            immediate_or_cancel: false,
+            max_ts: 100,
+        };
+
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
+        assert!(res.is_ok());
+        assert_eq!(user.perp_positions[0].base_asset_amount, 0);
+        assert_eq!(user.orders[0].base_asset_amount_filled, 0);
+        assert_eq!(user.orders[0].quote_asset_amount_filled, 0);
+
+        // fill the order
+        let result = update_order_after_fill(&mut user.orders[0], 2, 100);
+        assert_eq!(result, Ok(false));
+        assert_eq!(user.orders[0].base_asset_amount_filled, 2);
+        assert_eq!(user.orders[0].quote_asset_amount_filled, 100);
+        assert_eq!(user.orders[0].status, OrderStatus::Open);
+        assert_ne!(user.orders[0].status, OrderStatus::Filled);
+    }
+
+    #[test]
+    fn update_order_after_fill_marks_order_filled_when_unfilled_is_zero() {
+        let mut user = User::default();
+        let order_params = OrderParams {
+            order_type: OrderType::Market,
+            direction: PositionDirection::Short,
+            base_asset_amount: 5,
+            price: 100,
+            market_index: 2,
+            reduce_only: false,
+            post_only: false,
+            immediate_or_cancel: false,
+            max_ts: 100,
+        };
+
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
+        assert!(res.is_ok());
+        assert_eq!(user.perp_positions[0].base_asset_amount, 0);
+        assert_eq!(user.orders[0].base_asset_amount_filled, 0);
+        assert_eq!(user.orders[0].quote_asset_amount_filled, 0);
+
+        // fill the order
+        let result = update_order_after_fill(&mut user.orders[0], 5, 500);
+        assert_eq!(result, Ok(true));
+        assert_eq!(user.orders[0].base_asset_amount_filled, 5);
+        assert_eq!(user.orders[0].quote_asset_amount_filled, 500);
+        assert_eq!(user.orders[0].status, OrderStatus::Filled);
+        assert_ne!(user.orders[0].status, OrderStatus::Open);
+    }
+
 }

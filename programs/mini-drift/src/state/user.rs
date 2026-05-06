@@ -1,5 +1,7 @@
 // protocol-v2-master/programs/drift/src/state/user.rs
 
+use std::cmp::min;
+
 use anchor_lang::prelude::*;
 
 use crate::error::{ErrorCode, MiniDriftResult};
@@ -202,6 +204,48 @@ impl Order {
             ..Order::default()
         }
     }
+
+    pub fn get_base_asset_amount_unfilled(
+        &self,
+        existing_position: Option<i64>,
+    ) -> MiniDriftResult<u64> {
+        let unfilled = self
+            .base_asset_amount
+            .checked_sub(self.base_asset_amount_filled)
+            .ok_or(ErrorCode::MathError)?;
+        if existing_position.is_none() {
+            Ok(unfilled)
+        } else {
+            if self.reduce_only {
+                let existing_position_value = existing_position.unwrap();
+                if existing_position_value == 0 {
+                    Ok(0)
+                } else {
+                    let allowed_unfilled = min(unfilled, existing_position_value.unsigned_abs());
+
+                    if self.direction == PositionDirection::Long && existing_position_value > 0 {
+                        return Ok(0);
+                    } else if self.direction == PositionDirection::Long
+                        && existing_position_value < 0
+                    {
+                        return Ok(allowed_unfilled);
+                    } else if self.direction == PositionDirection::Short
+                        && existing_position_value > 0
+                    {
+                        return Ok(allowed_unfilled);
+                    } else {
+                        return Ok(0);
+                    }
+                }
+            } else {
+                Ok(unfilled)
+            }
+        }
+    }
+
+    pub fn update_open_bids_and_asks(&self) -> bool {
+        true
+    }
 }
 
 #[account]
@@ -257,10 +301,16 @@ impl User {
         self.get_available_order_index()
             .ok_or(ErrorCode::NoOrderSlotAvailable)
     }
+
+    pub fn decrement_open_orders(&mut self) {
+        self.open_orders = self.open_orders.saturating_sub(1);
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::controller::orders::place_perp_order;
+
     use super::*;
 
     #[test]
@@ -362,6 +412,25 @@ mod tests {
     }
 
     #[test]
+    fn user_decrement_open_orders_decrements_open_orders() {
+        let mut user = User::default();
+        user.open_orders = 1;
+
+        user.decrement_open_orders();
+
+        assert_eq!(user.open_orders, 0);
+    }
+
+    #[test]
+    fn user_decrement_open_orders_saturates_at_zero() {
+        let mut user = User::default();
+
+        user.decrement_open_orders();
+
+        assert_eq!(user.open_orders, 0);
+    }
+
+    #[test]
     fn order_new_from_params_stores_params_and_protocol_fields() {
         let order_params = OrderParams {
             order_type: OrderType::Limit,
@@ -390,5 +459,82 @@ mod tests {
         assert_eq!(order.post_only, order_params.post_only);
         assert_eq!(order.immediate_or_cancel, order_params.immediate_or_cancel);
         assert_eq!(order.max_ts, order_params.max_ts);
+    }
+
+    #[test]
+    fn order_get_base_asset_amount_unfilled_returns_total_minus_filled() {
+        let mut user = User::default();
+
+        let order_params = OrderParams {
+            order_type: OrderType::Market,
+            direction: PositionDirection::Long,
+            base_asset_amount: 10,
+            price: 100,
+            market_index: 2,
+            reduce_only: false,
+            post_only: false,
+            immediate_or_cancel: false,
+            max_ts: 12345,
+        };
+
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
+        assert!(res.is_ok());
+        user.orders[0].base_asset_amount_filled = 3;
+        assert_eq!(user.open_orders, 1);
+        assert_eq!(user.orders[0].status, OrderStatus::Open);
+
+        let unfilled = user.orders[0].get_base_asset_amount_unfilled(None).unwrap();
+        assert_eq!(unfilled, 7);
+    }
+
+    #[test]
+    fn order_get_base_asset_amount_unfilled_caps_reduce_only_to_existing_position() {
+        let mut order = Order::default();
+
+        order.direction = PositionDirection::Short;
+        order.base_asset_amount = 15;
+        order.base_asset_amount_filled = 0;
+        order.reduce_only = true;
+
+        let existing_position_base_asset_amount = 10;
+
+        let result =
+            order.get_base_asset_amount_unfilled(Some(existing_position_base_asset_amount));
+
+        assert_eq!(result, Ok(10));
+    }
+
+    #[test]
+    fn order_get_base_asset_amount_unfilled_returns_zero_for_reduce_only_same_direction() {
+        let mut order = Order::default();
+
+        order.direction = PositionDirection::Long;
+        order.base_asset_amount = 15;
+        order.base_asset_amount_filled = 0;
+        order.reduce_only = true;
+
+        let existing_position_base_asset_amount = 10;
+
+        let result =
+            order.get_base_asset_amount_unfilled(Some(existing_position_base_asset_amount));
+
+        assert_eq!(result, Ok(0));
+    }
+
+    #[test]
+    fn order_get_base_asset_amount_unfilled_returns_zero_for_reduce_only_without_position() {
+        let mut order = Order::default();
+
+        order.direction = PositionDirection::Long;
+        order.base_asset_amount = 15;
+        order.base_asset_amount_filled = 0;
+        order.reduce_only = true;
+
+        let existing_position_base_asset_amount = 0;
+
+        let result =
+            order.get_base_asset_amount_unfilled(Some(existing_position_base_asset_amount));
+
+        assert_eq!(result, Ok(0));
     }
 }
