@@ -118,6 +118,22 @@ pub fn update_order_after_fill(
     }
 }
 
+pub fn decrement_open_orders_after_full_fill(
+    user: &mut User,
+    position_index: usize,
+    is_filled: bool,
+) -> MiniDriftResult<()> {
+    if is_filled {
+        user.perp_positions[position_index].open_orders = user.perp_positions[position_index]
+            .open_orders
+            .checked_sub(1)
+            .ok_or(ErrorCode::MathError)?;
+        user.decrement_open_orders();
+        Ok(())
+    } else {
+        Ok(())
+    }
+}
 #[cfg(test)]
 mod tests {
 
@@ -480,4 +496,41 @@ mod tests {
         assert_ne!(user.orders[0].status, OrderStatus::Open);
     }
 
+    #[test]
+    fn decrement_open_orders_after_full_fill_does_nothing_when_not_filled() {
+        let mut user = User::default();
+        user.open_orders = 1;
+        user.perp_positions[0].open_orders = 1;
+
+        let res = decrement_open_orders_after_full_fill(&mut user, 0, false);
+
+        assert!(res.is_ok());
+        assert_eq!(user.open_orders, 1);
+        assert_eq!(user.perp_positions[0].open_orders, 1);
+    }
+
+    #[test]
+    fn decrement_open_orders_after_full_fill_decrements_counters_when_filled() {
+        let mut user = User::default();
+        user.open_orders = 2;
+        user.perp_positions[0].open_orders = 1;
+
+        let res = decrement_open_orders_after_full_fill(&mut user, 0, true);
+
+        assert!(res.is_ok());
+        assert_eq!(user.open_orders, 1);
+        assert_eq!(user.perp_positions[0].open_orders, 0);
+    }
+
+    #[test]
+    fn decrement_open_orders_after_full_fill_errors_when_position_counter_is_zero() {
+        let mut user = User::default();
+        user.open_orders = 1;
+        // user.perp_positions[0].open_orders stays 0
+
+        let res = decrement_open_orders_after_full_fill(&mut user, 0, true);
+
+        let err = res.unwrap_err();
+        assert_eq!(err, ErrorCode::MathError);
+    }
 }
