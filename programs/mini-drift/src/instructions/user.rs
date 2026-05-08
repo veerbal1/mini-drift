@@ -10,7 +10,8 @@ pub fn handle_place_perp_order(
     let now = Clock::get()?.unix_timestamp;
     let user_key = ctx.accounts.user.key();
     let user = &mut ctx.accounts.user;
-    place_perp_order(user, user_key, order_params, now)?;
+    let slot = Clock::get()?.slot;
+    place_perp_order(user, user_key, order_params, now, slot)?;
 
     Ok(())
 }

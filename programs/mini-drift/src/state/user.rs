@@ -176,6 +176,8 @@ pub struct Order {
     pub auction_end_price: i64,
 
     pub bit_flags: u8,
+
+    pub slot: u64,
 }
 
 impl Order {
@@ -187,6 +189,7 @@ impl Order {
         params: OrderParams,
         order_id: u32,
         existing_position_direction: PositionDirection,
+        slot: u64,
     ) -> Self {
         Order {
             order_type: params.order_type,
@@ -201,6 +204,7 @@ impl Order {
             order_id,
             status: OrderStatus::Open,
             existing_position_direction,
+            slot,
             ..Order::default()
         }
     }
@@ -245,6 +249,10 @@ impl Order {
 
     pub fn update_open_bids_and_asks(&self) -> bool {
         true
+    }
+
+    pub fn has_auction(&self) -> bool {
+        self.auction_duration != 0
     }
 }
 
@@ -443,7 +451,7 @@ mod tests {
             immediate_or_cancel: false,
             max_ts: 12345,
         };
-        let order = Order::new_from_params(order_params, 7, PositionDirection::Short);
+        let order = Order::new_from_params(order_params, 7, PositionDirection::Short, 10);
         assert_eq!(order.status, OrderStatus::Open);
         assert_eq!(order.order_id, 7);
         assert_eq!(order.existing_position_direction, PositionDirection::Short);
@@ -459,6 +467,7 @@ mod tests {
         assert_eq!(order.post_only, order_params.post_only);
         assert_eq!(order.immediate_or_cancel, order_params.immediate_or_cancel);
         assert_eq!(order.max_ts, order_params.max_ts);
+        assert_eq!(order.slot, 10);
     }
 
     #[test]
@@ -477,11 +486,12 @@ mod tests {
             max_ts: 12345,
         };
 
-        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0, 10);
         assert!(res.is_ok());
         user.orders[0].base_asset_amount_filled = 3;
         assert_eq!(user.open_orders, 1);
         assert_eq!(user.orders[0].status, OrderStatus::Open);
+        assert_eq!(user.orders[0].slot, 10);
 
         let unfilled = user.orders[0].get_base_asset_amount_unfilled(None).unwrap();
         assert_eq!(unfilled, 7);
@@ -536,5 +546,21 @@ mod tests {
             order.get_base_asset_amount_unfilled(Some(existing_position_base_asset_amount));
 
         assert_eq!(result, Ok(0));
+    }
+
+    #[test]
+    fn order_has_auction_returns_false_when_duration_is_zero() {
+        let mut order = Order::default();
+        order.auction_duration = 0;
+
+        assert!(!order.has_auction())
+    }
+
+    #[test]
+    fn order_has_auction_returns_true_when_duration_is_nonzero() {
+        let mut order = Order::default();
+        order.auction_duration = 10;
+
+        assert!(order.has_auction())
     }
 }

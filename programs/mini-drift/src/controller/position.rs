@@ -90,7 +90,7 @@ mod tests {
             max_ts: 100,
         };
 
-        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0, 10);
         assert!(res.is_ok());
         assert_eq!(user.perp_positions[0].open_bids, 5);
 
@@ -122,7 +122,7 @@ mod tests {
             max_ts: 100,
         };
 
-        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0);
+        let res = place_perp_order(&mut user, Pubkey::default(), order_params, 0, 10);
         assert!(res.is_ok());
         assert_eq!(user.perp_positions[0].open_asks, -5);
 
