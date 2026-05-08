@@ -254,6 +254,14 @@ impl Order {
     pub fn has_auction(&self) -> bool {
         self.auction_duration != 0
     }
+
+    pub fn get_limit_price(&self) -> MiniDriftResult<Option<u64>> {
+        if self.price != 0 {
+            Ok(Some(self.price))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 #[account]
@@ -562,5 +570,24 @@ mod tests {
         order.auction_duration = 10;
 
         assert!(order.has_auction())
+    }
+
+    #[test]
+    fn order_get_limit_price_returns_some_price_when_price_is_nonzero() {
+        let mut order = Order::default();
+        order.price = 100;
+
+        let result = order.get_limit_price();
+
+        assert_eq!(result, Ok(Some(100)));
+    }
+
+    #[test]
+    fn order_get_limit_price_returns_none_when_price_is_zero() {
+        let order = Order::default();
+
+        let result = order.get_limit_price();
+
+        assert_eq!(result, Ok(None));
     }
 }
