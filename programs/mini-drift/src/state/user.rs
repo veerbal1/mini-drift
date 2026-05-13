@@ -262,6 +262,37 @@ impl Order {
             Ok(None)
         }
     }
+
+    pub fn is_limit_order(&self) -> bool {
+        self.order_type == OrderType::Limit || self.order_type == OrderType::TriggerLimit
+    }
+
+    pub fn is_auction_complete(&self, slot: u64) -> MiniDriftResult<bool> {
+        let auction_duration = self.auction_duration as u64;
+        if auction_duration == 0 {
+            return Ok(true);
+        }
+
+        let result = slot
+            > self
+                .slot
+                .checked_add(auction_duration)
+                .ok_or(ErrorCode::MathError)?;
+
+        Ok(result)
+    }
+
+    pub fn is_resting_limit_order(&self, slot: u64) -> MiniDriftResult<bool> {
+        if !self.is_limit_order() {
+            return Ok(false);
+        } else {
+            if self.post_only || self.is_auction_complete(slot)? {
+                return Ok(true);
+            } else {
+                return Ok(false);
+            }
+        }
+    }
 }
 
 #[account]
@@ -589,5 +620,124 @@ mod tests {
         let result = order.get_limit_price();
 
         assert_eq!(result, Ok(None));
+    }
+
+    #[test]
+    fn order_is_limit_order_returns_true_for_limit() {
+        let mut order = Order::default();
+        order.order_type = OrderType::Limit;
+
+        assert!(order.is_limit_order());
+    }
+
+    #[test]
+    fn order_is_limit_order_returns_true_for_trigger_limit() {
+        let mut order = Order::default();
+        order.order_type = OrderType::TriggerLimit;
+
+        assert!(order.is_limit_order());
+    }
+
+    #[test]
+    fn order_is_limit_order_returns_false_for_market() {
+        let mut order = Order::default();
+        order.order_type = OrderType::Market;
+
+        assert!(!order.is_limit_order());
+    }
+
+    #[test]
+    fn order_is_auction_complete_returns_true_when_duration_is_zero() {
+        let mut order = Order::default();
+        order.slot = 100;
+        order.auction_duration = 0;
+
+        let result = order.is_auction_complete(100);
+
+        assert_eq!(result, Ok(true));
+    }
+
+    #[test]
+    fn order_is_auction_complete_returns_false_when_elapsed_equals_duration() {
+        let mut order = Order::default();
+        order.slot = 100;
+        order.auction_duration = 10;
+
+        let result = order.is_auction_complete(110);
+
+        assert_eq!(result, Ok(false));
+    }
+
+    #[test]
+    fn order_is_auction_complete_returns_true_when_elapsed_is_greater_than_duration() {
+        let mut order = Order::default();
+        order.slot = 100;
+        order.auction_duration = 10;
+
+        let result = order.is_auction_complete(111);
+
+        assert_eq!(result, Ok(true));
+    }
+
+    #[test]
+    fn order_is_resting_limit_order_returns_false_for_market_order() {
+        let mut order = Order::default();
+        order.order_type = OrderType::Market;
+
+        let result = order.is_resting_limit_order(0);
+
+        assert_eq!(result, Ok(false));
+    }
+
+    #[test]
+    fn order_is_resting_limit_order_returns_true_for_post_only_limit_order() {
+        let mut order = Order::default();
+        order.order_type = OrderType::Limit;
+        order.post_only = true;
+        order.slot = 100;
+        order.auction_duration = 10;
+
+        let result = order.is_resting_limit_order(105);
+
+        assert_eq!(result, Ok(true));
+    }
+
+    #[test]
+    fn order_is_resting_limit_order_returns_false_for_limit_order_before_auction_complete() {
+        let mut order = Order::default();
+        order.order_type = OrderType::Limit;
+        order.post_only = false;
+        order.slot = 100;
+        order.auction_duration = 10;
+
+        let result = order.is_resting_limit_order(110);
+
+        assert_eq!(result, Ok(false));
+    }
+
+    #[test]
+    fn order_is_resting_limit_order_returns_true_for_limit_order_after_auction_complete() {
+        let mut order = Order::default();
+        order.order_type = OrderType::Limit;
+        order.post_only = false;
+        order.slot = 100;
+        order.auction_duration = 10;
+
+        let result = order.is_resting_limit_order(111);
+
+        assert_eq!(result, Ok(true));
+    }
+
+    #[test]
+    fn order_is_resting_limit_order_returns_true_for_post_only_trigger_limit_order() {
+        let mut order = Order::default();
+        order.order_type = OrderType::TriggerLimit;
+        order.post_only = true;
+        order.slot = 100;
+        order.auction_duration = 10;
+
+        let result = order.is_resting_limit_order(105);
+
+        assert_eq!(result, Ok(true));
     }
 }

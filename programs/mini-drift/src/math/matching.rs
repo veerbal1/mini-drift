@@ -1,4 +1,7 @@
-use crate::state::user::{Order, PositionDirection};
+use crate::{
+    error::{ErrorCode, MiniDriftResult},
+    state::user::{Order, PositionDirection},
+};
 
 pub fn do_orders_cross(
     maker_direction: PositionDirection,
@@ -25,9 +28,35 @@ pub fn are_orders_same_market_but_different_sides(
     }
 }
 
+pub fn is_maker_for_taker(
+    maker_order: &Order,
+    taker_order: &Order,
+    slot: u64,
+) -> MiniDriftResult<bool> {
+    if taker_order.post_only {
+        return Ok(false);
+    } else if !maker_order.is_resting_limit_order(slot)? {
+        return Ok(false);
+    } else if !taker_order.is_resting_limit_order(slot)? {
+        return Ok(true);
+    } else if maker_order.post_only {
+        return Ok(true);
+    } else {
+        return Ok(maker_order
+            .slot
+            .checked_add(maker_order.auction_duration as u64)
+            .ok_or(ErrorCode::MathError)?
+            <= taker_order
+                .slot
+                .checked_add(taker_order.auction_duration as u64)
+                .ok_or(ErrorCode::MathError)?);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::user::OrderType;
 
     #[test]
     fn do_orders_cross_returns_true_when_maker_short_price_is_inside_taker_buy_wall() {
@@ -104,5 +133,120 @@ mod tests {
             are_orders_same_market_but_different_sides(&maker_order, &taker_order),
             false
         );
+    }
+
+    #[test]
+    fn is_maker_for_taker_returns_false_when_taker_is_post_only() {
+        let maker = Order {
+            order_type: OrderType::Limit,
+            post_only: true,
+            slot: 0,
+            auction_duration: 0,
+            ..Order::default()
+        };
+        let taker = Order {
+            post_only: true,
+            ..Order::default()
+        };
+
+        assert_eq!(is_maker_for_taker(&maker, &taker, 0), Ok(false));
+    }
+
+    #[test]
+    fn is_maker_for_taker_returns_false_when_maker_is_not_resting_limit_order() {
+        let maker = Order {
+            order_type: OrderType::Market,
+            ..Order::default()
+        };
+        let taker = Order {
+            order_type: OrderType::Limit,
+            post_only: false,
+            slot: 0,
+            auction_duration: 0,
+            ..Order::default()
+        };
+
+        assert_eq!(is_maker_for_taker(&maker, &taker, 100), Ok(false));
+    }
+
+    #[test]
+    fn is_maker_for_taker_returns_true_when_maker_is_resting_and_taker_is_not_resting() {
+        let maker = Order {
+            order_type: OrderType::Limit,
+            post_only: true,
+            slot: 0,
+            auction_duration: 0,
+            ..Order::default()
+        };
+        let taker = Order {
+            order_type: OrderType::Market,
+            post_only: false,
+            ..Order::default()
+        };
+
+        assert_eq!(is_maker_for_taker(&maker, &taker, 0), Ok(true));
+    }
+
+    #[test]
+    fn is_maker_for_taker_returns_true_when_maker_is_post_only() {
+        let maker = Order {
+            order_type: OrderType::Limit,
+            post_only: true,
+            slot: 100,
+            auction_duration: 10,
+            ..Order::default()
+        };
+        let taker = Order {
+            order_type: OrderType::Limit,
+            post_only: false,
+            slot: 150,
+            auction_duration: 10,
+            ..Order::default()
+        };
+
+        let slot = 200;
+        assert_eq!(is_maker_for_taker(&maker, &taker, slot), Ok(true));
+    }
+
+    #[test]
+    fn is_maker_for_taker_returns_true_when_maker_ready_time_is_older() {
+        let maker = Order {
+            order_type: OrderType::Limit,
+            post_only: false,
+            slot: 100,
+            auction_duration: 10,
+            ..Order::default()
+        };
+        let taker = Order {
+            order_type: OrderType::Limit,
+            post_only: false,
+            slot: 150,
+            auction_duration: 10,
+            ..Order::default()
+        };
+
+        let slot = 200;
+        assert_eq!(is_maker_for_taker(&maker, &taker, slot), Ok(true));
+    }
+
+    #[test]
+    fn is_maker_for_taker_returns_false_when_maker_ready_time_is_newer() {
+        let maker = Order {
+            order_type: OrderType::Limit,
+            post_only: false,
+            slot: 150,
+            auction_duration: 10,
+            ..Order::default()
+        };
+        let taker = Order {
+            order_type: OrderType::Limit,
+            post_only: false,
+            slot: 100,
+            auction_duration: 10,
+            ..Order::default()
+        };
+
+        let slot = 200;
+        assert_eq!(is_maker_for_taker(&maker, &taker, slot), Ok(false));
     }
 }
