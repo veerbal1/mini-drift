@@ -32,13 +32,13 @@ pub fn calculate_auction_price(order: &Order, current_slot: u64) -> MiniDriftRes
     .checked_div(order.auction_duration as u64)
     .ok_or(ErrorCode::MathError)?;
     if order.direction == PositionDirection::Long {
-        return (order.auction_start_price as u64)
+        (order.auction_start_price as u64)
             .checked_add(elapsed_price_gap)
-            .ok_or(ErrorCode::MathError);
+            .ok_or(ErrorCode::MathError)
     } else {
-        return (order.auction_start_price as u64)
+        (order.auction_start_price as u64)
             .checked_sub(elapsed_price_gap)
-            .ok_or(ErrorCode::MathError);
+            .ok_or(ErrorCode::MathError)
     }
 }
 

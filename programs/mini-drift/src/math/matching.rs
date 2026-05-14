@@ -1,5 +1,6 @@
 use crate::{
     error::{ErrorCode, MiniDriftResult},
+    math::orders::calculate_quote_asset_amount_for_maker_order,
     state::user::{Order, PositionDirection},
 };
 
@@ -19,13 +20,26 @@ pub fn are_orders_same_market_but_different_sides(
     maker_order: &Order,
     taker_order: &Order,
 ) -> bool {
-    if maker_order.market_index != taker_order.market_index {
-        false
-    } else if maker_order.direction == taker_order.direction {
-        false
-    } else {
-        true
-    }
+    maker_order.market_index == taker_order.market_index
+        && maker_order.direction != taker_order.direction
+}
+
+pub fn calculate_fill_for_matched_orders(
+    maker_base_asset_amount: u64,
+    maker_price: u64,
+    taker_base_asset_amount: u64,
+    base_decimals: u32,
+    maker_direction: PositionDirection,
+) -> MiniDriftResult<(u64, u64)> {
+    let base_asset_amount_filled = maker_base_asset_amount.min(taker_base_asset_amount);
+    let quote_asset_amount_filled = calculate_quote_asset_amount_for_maker_order(
+        base_asset_amount_filled,
+        maker_price,
+        base_decimals,
+        maker_direction,
+    )?;
+
+    Ok((base_asset_amount_filled, quote_asset_amount_filled))
 }
 
 pub fn is_maker_for_taker(
@@ -33,24 +47,22 @@ pub fn is_maker_for_taker(
     taker_order: &Order,
     slot: u64,
 ) -> MiniDriftResult<bool> {
-    if taker_order.post_only {
+    if taker_order.post_only || !maker_order.is_resting_limit_order(slot)? {
         return Ok(false);
-    } else if !maker_order.is_resting_limit_order(slot)? {
-        return Ok(false);
-    } else if !taker_order.is_resting_limit_order(slot)? {
-        return Ok(true);
-    } else if maker_order.post_only {
-        return Ok(true);
-    } else {
-        return Ok(maker_order
-            .slot
-            .checked_add(maker_order.auction_duration as u64)
-            .ok_or(ErrorCode::MathError)?
-            <= taker_order
-                .slot
-                .checked_add(taker_order.auction_duration as u64)
-                .ok_or(ErrorCode::MathError)?);
     }
+
+    if !taker_order.is_resting_limit_order(slot)? || maker_order.post_only {
+        return Ok(true);
+    }
+
+    Ok(maker_order
+        .slot
+        .checked_add(maker_order.auction_duration as u64)
+        .ok_or(ErrorCode::MathError)?
+        <= taker_order
+            .slot
+            .checked_add(taker_order.auction_duration as u64)
+            .ok_or(ErrorCode::MathError)?)
 }
 
 #[cfg(test)]
@@ -133,6 +145,34 @@ mod tests {
             are_orders_same_market_but_different_sides(&maker_order, &taker_order),
             false
         );
+    }
+
+    #[test]
+    fn calculate_fill_for_matched_orders_uses_smaller_base_amount() {
+        let fill = calculate_fill_for_matched_orders(
+            5_000_000_000,
+            120_000_000,
+            3_000_000_000,
+            9,
+            PositionDirection::Short,
+        )
+        .unwrap();
+
+        assert_eq!(fill, (3_000_000_000, 360_000_000));
+    }
+
+    #[test]
+    fn calculate_fill_for_matched_orders_uses_maker_price_for_quote_amount() {
+        let (_, quote_asset_amount_filled) = calculate_fill_for_matched_orders(
+            2_000_000_000,
+            120_000_000,
+            2_000_000_000,
+            9,
+            PositionDirection::Short,
+        )
+        .unwrap();
+
+        assert_eq!(quote_asset_amount_filled, 240_000_000);
     }
 
     #[test]

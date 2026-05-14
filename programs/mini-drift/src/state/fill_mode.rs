@@ -40,7 +40,7 @@ impl FillMode {
                         .ok_or(ErrorCode::MathError)?;
                     let pretended_slots = order
                         .slot
-                        .checked_add(calc_slot as u64)
+                        .checked_add(calc_slot)
                         .ok_or(ErrorCode::MathError)?;
                     let auction_price = calculate_auction_price(order, pretended_slots)?;
                     Ok(Some(auction_price))

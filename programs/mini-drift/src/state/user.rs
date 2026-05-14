@@ -217,33 +217,23 @@ impl Order {
             .base_asset_amount
             .checked_sub(self.base_asset_amount_filled)
             .ok_or(ErrorCode::MathError)?;
-        if existing_position.is_none() {
-            Ok(unfilled)
-        } else {
-            if self.reduce_only {
-                let existing_position_value = existing_position.unwrap();
-                if existing_position_value == 0 {
-                    Ok(0)
-                } else {
-                    let allowed_unfilled = min(unfilled, existing_position_value.unsigned_abs());
-
-                    if self.direction == PositionDirection::Long && existing_position_value > 0 {
-                        return Ok(0);
-                    } else if self.direction == PositionDirection::Long
-                        && existing_position_value < 0
-                    {
-                        return Ok(allowed_unfilled);
-                    } else if self.direction == PositionDirection::Short
-                        && existing_position_value > 0
-                    {
-                        return Ok(allowed_unfilled);
-                    } else {
-                        return Ok(0);
-                    }
-                }
-            } else {
-                Ok(unfilled)
+        if let Some(existing_position_value) = existing_position {
+            if !self.reduce_only || existing_position_value == 0 {
+                return Ok(if self.reduce_only { 0 } else { unfilled });
             }
+
+            let allowed_unfilled = min(unfilled, existing_position_value.unsigned_abs());
+            let reduces_position = (self.direction == PositionDirection::Long
+                && existing_position_value < 0)
+                || (self.direction == PositionDirection::Short && existing_position_value > 0);
+
+            if reduces_position {
+                Ok(allowed_unfilled)
+            } else {
+                Ok(0)
+            }
+        } else {
+            Ok(unfilled)
         }
     }
 
@@ -270,27 +260,25 @@ impl Order {
     pub fn is_auction_complete(&self, slot: u64) -> MiniDriftResult<bool> {
         let auction_duration = self.auction_duration as u64;
         if auction_duration == 0 {
-            return Ok(true);
+            Ok(true)
+        } else {
+            let result = slot
+                > self
+                    .slot
+                    .checked_add(auction_duration)
+                    .ok_or(ErrorCode::MathError)?;
+
+            Ok(result)
         }
-
-        let result = slot
-            > self
-                .slot
-                .checked_add(auction_duration)
-                .ok_or(ErrorCode::MathError)?;
-
-        Ok(result)
     }
 
     pub fn is_resting_limit_order(&self, slot: u64) -> MiniDriftResult<bool> {
         if !self.is_limit_order() {
-            return Ok(false);
+            Ok(false)
+        } else if self.post_only || self.is_auction_complete(slot)? {
+            Ok(true)
         } else {
-            if self.post_only || self.is_auction_complete(slot)? {
-                return Ok(true);
-            } else {
-                return Ok(false);
-            }
+            Ok(false)
         }
     }
 }

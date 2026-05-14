@@ -114,7 +114,7 @@ pub fn update_order_after_fill(
     let base_asset_amount_unfilled = order.get_base_asset_amount_unfilled(None)?;
     if base_asset_amount_unfilled == 0 {
         order.status = OrderStatus::Filled;
-        return Ok(true);
+        Ok(true)
     } else {
         Ok(false)
     }
@@ -136,6 +136,11 @@ pub fn decrement_open_orders_after_full_fill(
         Ok(())
     }
 }
+
+pub fn should_reward_keeper(user_authority: &Pubkey, filler_authority: &Pubkey) -> bool {
+    user_authority != filler_authority
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -161,6 +166,27 @@ mod tests {
         assert_eq!(err, ErrorCode::UnsupportedOrderType);
         assert_eq!(user.open_orders, 0);
         assert_eq!(user.perp_positions[0].market_index, 0);
+    }
+
+    #[test]
+    fn should_reward_keeper_returns_false_for_self_cleanup() {
+        let user_authority = Pubkey::new_unique();
+
+        assert_eq!(
+            should_reward_keeper(&user_authority, &user_authority),
+            false
+        );
+    }
+
+    #[test]
+    fn should_reward_keeper_returns_true_for_external_keeper() {
+        let user_authority = Pubkey::new_unique();
+        let filler_authority = Pubkey::new_unique();
+
+        assert_eq!(
+            should_reward_keeper(&user_authority, &filler_authority),
+            true
+        );
     }
 
     #[test]
