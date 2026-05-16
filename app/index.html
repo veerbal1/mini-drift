@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mini Drift Wallet Balance</title>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="module">
+      import React, { useMemo, useState } from "https://esm.sh/react@18.3.1";
+      import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
+      import {
+        Connection,
+        LAMPORTS_PER_SOL,
+        PublicKey,
+        clusterApiUrl,
+      } from "https://esm.sh/@solana/web3.js@1.98.4";
+
+      const cluster = "devnet";
+
+      function App() {
+        const connection = useMemo(
+          () => new Connection(clusterApiUrl(cluster), "confirmed"),
+          []
+        );
+        const [publicKey, setPublicKey] = useState(null);
+        const [balance, setBalance] = useState(null);
+        const [status, setStatus] = useState("");
+
+        async function connectWallet() {
+          setStatus("");
+          const wallet = window.solana;
+
+          if (!wallet?.connect) {
+            setStatus("No Solana wallet found.");
+            return;
+          }
+
+          try {
+            const response = await wallet.connect();
+            const walletPublicKey = new PublicKey(
+              response.publicKey.toString()
+            );
+            const lamports = await connection.getBalance(
+              walletPublicKey,
+              "confirmed"
+            );
+
+            setPublicKey(walletPublicKey.toBase58());
+            setBalance(lamports / LAMPORTS_PER_SOL);
+          } catch (error) {
+            setStatus(error instanceof Error ? error.message : String(error));
+          }
+        }
+
+        async function disconnectWallet() {
+          await window.solana?.disconnect?.();
+          setPublicKey(null);
+          setBalance(null);
+          setStatus("");
+        }
+
+        return React.createElement(
+          "main",
+          null,
+          React.createElement("h1", null, "Connect + Balance"),
+          React.createElement("p", null, `Cluster: ${cluster}`),
+          publicKey
+            ? React.createElement(
+                "button",
+                { type: "button", onClick: disconnectWallet },
+                "Disconnect wallet"
+              )
+            : React.createElement(
+                "button",
+                { type: "button", onClick: connectWallet },
+                "Connect wallet"
+              ),
+          publicKey &&
+            React.createElement("p", null, `Public key: ${publicKey}`),
+          balance !== null &&
+            React.createElement("p", null, `Balance: ${balance} SOL`),
+          status && React.createElement("p", null, status)
+        );
+      }
+
+      createRoot(document.getElementById("root")).render(
+        React.createElement(App)
+      );
+    </script>
+  </body>
+</html>

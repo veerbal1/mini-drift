@@ -5,6 +5,12 @@ use crate::{
     state::user::{PerpPosition, PositionDirection},
 };
 
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct PositionDelta {
+    pub base_asset_amount: i64,
+    pub quote_asset_amount: i64,
+}
+
 pub fn increase_open_bids_and_asks(
     position: &mut PerpPosition,
     direction: &PositionDirection,
