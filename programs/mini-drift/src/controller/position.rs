@@ -21,11 +21,11 @@ pub fn update_position_and_market(
     delta: &PositionDelta,
     market: &mut PerpMarket,
 ) -> MiniDriftResult<i64> {
-    if market.order_step_size != 0
+    if market.amm.order_step_size != 0
         && !position
             .base_asset_amount
             .unsigned_abs()
-            .is_multiple_of(market.order_step_size)
+            .is_multiple_of(market.amm.order_step_size)
     {
         return Err(ErrorCode::InvalidPerpPositionDetected);
     };
@@ -132,6 +132,7 @@ mod tests {
         controller::orders::{place_perp_order, update_order_after_fill},
         state::{
             order_params::OrderParams,
+            perp_market::Amm,
             user::{OrderType, User},
         },
     };
@@ -163,7 +164,7 @@ mod tests {
     fn update_position_and_market_increases_position() {
         let mut position = position_with_amounts(5, -900, -900, -920);
         let mut perp_market = PerpMarket::default();
-        perp_market.order_step_size = 1;
+        perp_market.amm.order_step_size = 1;
 
         let realized_pnl =
             update_position_and_market(&mut position, &delta(2, -400), &mut perp_market);
@@ -179,7 +180,7 @@ mod tests {
     fn update_position_and_market_reduces_long_position_with_profit() {
         let mut position = position_with_amounts(10, -1000, -1000, -1000);
         let mut perp_market = PerpMarket::default();
-        perp_market.order_step_size = 1;
+        perp_market.amm.order_step_size = 1;
 
         let realized_pnl =
             update_position_and_market(&mut position, &delta(-4, 440), &mut perp_market);
@@ -195,7 +196,7 @@ mod tests {
     fn update_position_and_market_closes_position() {
         let mut position = position_with_amounts(10, -1000, -1000, -1000);
         let mut perp_market = PerpMarket::default();
-        perp_market.order_step_size = 1;
+        perp_market.amm.order_step_size = 1;
 
         let realized_pnl =
             update_position_and_market(&mut position, &delta(-10, 1100), &mut perp_market);
@@ -211,7 +212,7 @@ mod tests {
     fn update_position_and_market_flips_position() {
         let mut position = position_with_amounts(5, -500, -500, -500);
         let mut perp_market = PerpMarket::default();
-        perp_market.order_step_size = 1;
+        perp_market.amm.order_step_size = 1;
 
         let realized_pnl =
             update_position_and_market(&mut position, &delta(-8, 880), &mut perp_market);
@@ -228,7 +229,10 @@ mod tests {
         let mut position = position_with_amounts(5, -500, -500, -500);
         let original_position = position;
         let mut perp_market = PerpMarket {
-            order_step_size: 2,
+            amm: Amm {
+                order_step_size: 2,
+                ..Amm::default()
+            },
             number_of_users: 7,
             number_of_users_with_base: 3,
             ..PerpMarket::default()
@@ -247,7 +251,10 @@ mod tests {
     fn update_position_and_market_open_increments_user_counters() {
         let mut position = position_with_amounts(0, 0, 0, 0);
         let mut perp_market = PerpMarket {
-            order_step_size: 1,
+            amm: Amm {
+                order_step_size: 1,
+                ..Amm::default()
+            },
             number_of_users: 7,
             number_of_users_with_base: 3,
             ..PerpMarket::default()
@@ -265,7 +272,10 @@ mod tests {
     fn update_position_and_market_close_decrements_user_counters() {
         let mut position = position_with_amounts(5, -500, -500, -500);
         let mut perp_market = PerpMarket {
-            order_step_size: 1,
+            amm: Amm {
+                order_step_size: 1,
+                ..Amm::default()
+            },
             number_of_users: 7,
             number_of_users_with_base: 3,
             ..PerpMarket::default()
@@ -285,7 +295,10 @@ mod tests {
     fn update_position_and_market_close_counter_decrement_saturates() {
         let mut position = position_with_amounts(5, -500, -500, -500);
         let mut perp_market = PerpMarket {
-            order_step_size: 1,
+            amm: Amm {
+                order_step_size: 1,
+                ..Amm::default()
+            },
             number_of_users: 0,
             number_of_users_with_base: 0,
             ..PerpMarket::default()
@@ -304,7 +317,7 @@ mod tests {
         let mut position = position_with_amounts(i64::MAX, -1000, -1000, -1000);
         let original_position = position;
         let mut perp_market = PerpMarket::default();
-        perp_market.order_step_size = 1;
+        perp_market.amm.order_step_size = 1;
 
         let realized_pnl =
             update_position_and_market(&mut position, &delta(1, -100), &mut perp_market);
