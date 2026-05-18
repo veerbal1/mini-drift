@@ -21,6 +21,9 @@ pub enum ErrorCode {
 
     #[msg("Unexpected Error")]
     UnexpectedError,
+
+    #[msg("Invalid Perp Position Detected")]
+    InvalidPerpPositionDetected,
 }
 
 pub type MiniDriftResult<T = ()> = Result<T, ErrorCode>;
