@@ -22,7 +22,10 @@ pub fn update_position_and_market(
     market: &mut PerpMarket,
 ) -> MiniDriftResult<i64> {
     if market.order_step_size != 0
-        && position.base_asset_amount.unsigned_abs() % market.order_step_size != 0
+        && !position
+            .base_asset_amount
+            .unsigned_abs()
+            .is_multiple_of(market.order_step_size)
     {
         return Err(ErrorCode::InvalidPerpPositionDetected);
     };
