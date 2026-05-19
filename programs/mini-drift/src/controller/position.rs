@@ -39,6 +39,13 @@ pub fn update_position_and_market(
 
     let mut number_of_users = market.number_of_users;
     let mut number_of_users_with_base = market.number_of_users_with_base;
+    let mut quote_entry_amount_long = market.amm.quote_entry_amount_long;
+    let mut quote_entry_amount_short = market.amm.quote_entry_amount_short;
+    let mut quote_break_even_amount_long = market.amm.quote_break_even_amount_long;
+    let mut quote_break_even_amount_short = market.amm.quote_break_even_amount_short;
+
+    let entry_change = new_quote_entry_amount - position.quote_entry_amount;
+    let break_even_change = new_quote_break_even_amount - position.quote_break_even_amount;
 
     match update_type {
         PositionUpdateType::Open => {
@@ -48,14 +55,135 @@ pub fn update_position_and_market(
             number_of_users_with_base = number_of_users_with_base
                 .checked_add(1)
                 .ok_or(ErrorCode::MathError)?;
+            if new_base_asset_amount > 0 {
+                quote_entry_amount_long = quote_entry_amount_long
+                    .checked_add(entry_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+                quote_break_even_amount_long = quote_break_even_amount_long
+                    .checked_add(break_even_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+            } else {
+                quote_entry_amount_short = quote_entry_amount_short
+                    .checked_add(entry_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+                quote_break_even_amount_short = quote_break_even_amount_short
+                    .checked_add(break_even_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+            }
+        }
+        PositionUpdateType::Increase => {
+            if position.base_asset_amount > 0 {
+                quote_entry_amount_long = quote_entry_amount_long
+                    .checked_add(entry_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+                quote_break_even_amount_long = quote_break_even_amount_long
+                    .checked_add(break_even_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+            } else {
+                quote_entry_amount_short = quote_entry_amount_short
+                    .checked_add(entry_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+                quote_break_even_amount_short = quote_break_even_amount_short
+                    .checked_add(break_even_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+            }
+        }
+        PositionUpdateType::Reduce => {
+            if position.base_asset_amount > 0 {
+                quote_entry_amount_long = quote_entry_amount_long
+                    .checked_add(entry_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+                quote_break_even_amount_long = quote_break_even_amount_long
+                    .checked_add(break_even_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+            } else {
+                quote_entry_amount_short = quote_entry_amount_short
+                    .checked_add(entry_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+                quote_break_even_amount_short = quote_break_even_amount_short
+                    .checked_add(break_even_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+            }
         }
         PositionUpdateType::Close => {
             if new_base_asset_amount == 0 && new_quote_asset_amount == 0 {
                 number_of_users = number_of_users.saturating_sub(1);
             }
             number_of_users_with_base = number_of_users_with_base.saturating_sub(1);
+
+            if position.base_asset_amount > 0 {
+                quote_entry_amount_long = quote_entry_amount_long
+                    .checked_add(entry_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+                quote_break_even_amount_long = quote_break_even_amount_long
+                    .checked_add(break_even_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+            } else {
+                quote_entry_amount_short = quote_entry_amount_short
+                    .checked_add(entry_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+                quote_break_even_amount_short = quote_break_even_amount_short
+                    .checked_add(break_even_change as i128)
+                    .ok_or(ErrorCode::MathError)?;
+            }
         }
-        _ => {}
+        PositionUpdateType::Flip => {
+            if position.base_asset_amount > 0 {
+                let close_entry = position
+                    .quote_entry_amount
+                    .checked_neg()
+                    .ok_or(ErrorCode::MathError)?;
+                let close_break_even = position
+                    .quote_break_even_amount
+                    .checked_neg()
+                    .ok_or(ErrorCode::MathError)?;
+
+                quote_entry_amount_long = quote_entry_amount_long
+                    .checked_add(close_entry as i128)
+                    .ok_or(ErrorCode::MathError)?;
+                quote_break_even_amount_long = quote_break_even_amount_long
+                    .checked_add(close_break_even as i128)
+                    .ok_or(ErrorCode::MathError)?;
+            } else {
+                let close_entry = position
+                    .quote_entry_amount
+                    .checked_neg()
+                    .ok_or(ErrorCode::MathError)?;
+                let close_break_even = position
+                    .quote_break_even_amount
+                    .checked_neg()
+                    .ok_or(ErrorCode::MathError)?;
+
+                quote_entry_amount_short = quote_entry_amount_short
+                    .checked_add(close_entry as i128)
+                    .ok_or(ErrorCode::MathError)?;
+                quote_break_even_amount_short = quote_break_even_amount_short
+                    .checked_add(close_break_even as i128)
+                    .ok_or(ErrorCode::MathError)?;
+            }
+
+            if new_base_asset_amount > 0 {
+                let open_entry = new_quote_entry_amount;
+                let open_break_even = new_quote_break_even_amount;
+
+                quote_entry_amount_long = quote_entry_amount_long
+                    .checked_add(open_entry as i128)
+                    .ok_or(ErrorCode::MathError)?;
+                quote_break_even_amount_long = quote_break_even_amount_long
+                    .checked_add(open_break_even as i128)
+                    .ok_or(ErrorCode::MathError)?;
+            } else {
+                let open_entry = new_quote_entry_amount;
+                let open_break_even = new_quote_break_even_amount;
+
+                quote_entry_amount_short = quote_entry_amount_short
+                    .checked_add(open_entry as i128)
+                    .ok_or(ErrorCode::MathError)?;
+                quote_break_even_amount_short = quote_break_even_amount_short
+                    .checked_add(open_break_even as i128)
+                    .ok_or(ErrorCode::MathError)?;
+            }
+        }
     }
 
     position.base_asset_amount = new_base_asset_amount;
@@ -64,6 +192,10 @@ pub fn update_position_and_market(
     position.quote_break_even_amount = new_quote_break_even_amount;
     market.number_of_users = number_of_users;
     market.number_of_users_with_base = number_of_users_with_base;
+    market.amm.quote_entry_amount_long = quote_entry_amount_long;
+    market.amm.quote_entry_amount_short = quote_entry_amount_short;
+    market.amm.quote_break_even_amount_long = quote_break_even_amount_long;
+    market.amm.quote_break_even_amount_short = quote_break_even_amount_short;
 
     Ok(realized_pnl)
 }
@@ -213,6 +345,8 @@ mod tests {
         let mut position = position_with_amounts(5, -500, -500, -500);
         let mut perp_market = PerpMarket::default();
         perp_market.amm.order_step_size = 1;
+        perp_market.amm.quote_entry_amount_long = -500;
+        perp_market.amm.quote_break_even_amount_long = -500;
 
         let realized_pnl =
             update_position_and_market(&mut position, &delta(-8, 880), &mut perp_market);
@@ -222,6 +356,10 @@ mod tests {
         assert_eq!(position.quote_asset_amount, 380);
         assert_eq!(position.quote_entry_amount, 330);
         assert_eq!(position.quote_break_even_amount, 330);
+        assert_eq!(perp_market.amm.quote_entry_amount_long, 0);
+        assert_eq!(perp_market.amm.quote_break_even_amount_long, 0);
+        assert_eq!(perp_market.amm.quote_entry_amount_short, 330);
+        assert_eq!(perp_market.amm.quote_break_even_amount_short, 330);
     }
 
     #[test]
@@ -237,7 +375,7 @@ mod tests {
             number_of_users_with_base: 3,
             ..PerpMarket::default()
         };
-        let original_market = perp_market;
+        let original_market = perp_market.clone();
 
         let realized_pnl =
             update_position_and_market(&mut position, &delta(1, -100), &mut perp_market);
@@ -266,6 +404,122 @@ mod tests {
         assert_eq!(realized_pnl, Ok(0));
         assert_eq!(perp_market.number_of_users, 8);
         assert_eq!(perp_market.number_of_users_with_base, 4);
+        assert_eq!(perp_market.amm.quote_entry_amount_long, -500);
+        assert_eq!(perp_market.amm.quote_break_even_amount_long, -500);
+        assert_eq!(perp_market.amm.quote_entry_amount_short, 0);
+        assert_eq!(perp_market.amm.quote_break_even_amount_short, 0);
+    }
+
+    #[test]
+    fn update_position_and_market_open_long_updates_amm_quote_aggregates() {
+        let mut position = position_with_amounts(0, 0, 0, 0);
+        let mut perp_market = PerpMarket {
+            amm: Amm {
+                order_step_size: 1,
+                ..Amm::default()
+            },
+            ..PerpMarket::default()
+        };
+
+        let realized_pnl =
+            update_position_and_market(&mut position, &delta(5, -500), &mut perp_market);
+
+        assert_eq!(realized_pnl, Ok(0));
+        assert_eq!(perp_market.amm.quote_entry_amount_long, -500);
+        assert_eq!(perp_market.amm.quote_entry_amount_short, 0);
+        assert_eq!(perp_market.amm.quote_break_even_amount_long, -500);
+        assert_eq!(perp_market.amm.quote_break_even_amount_short, 0);
+    }
+
+    #[test]
+    fn update_position_and_market_open_short_updates_amm_quote_aggregates() {
+        let mut position = position_with_amounts(0, 0, 0, 0);
+        let mut perp_market = PerpMarket {
+            amm: Amm {
+                order_step_size: 1,
+                ..Amm::default()
+            },
+            ..PerpMarket::default()
+        };
+
+        let realized_pnl =
+            update_position_and_market(&mut position, &delta(-5, 500), &mut perp_market);
+
+        assert_eq!(realized_pnl, Ok(0));
+        assert_eq!(perp_market.amm.quote_entry_amount_long, 0);
+        assert_eq!(perp_market.amm.quote_entry_amount_short, 500);
+        assert_eq!(perp_market.amm.quote_break_even_amount_long, 0);
+        assert_eq!(perp_market.amm.quote_break_even_amount_short, 500);
+    }
+
+    #[test]
+    fn update_position_and_market_increase_long_updates_amm_quote_aggregates() {
+        let mut position = position_with_amounts(5, -500, -500, -500);
+        let mut perp_market = PerpMarket {
+            amm: Amm {
+                order_step_size: 1,
+                quote_entry_amount_long: -500,
+                quote_break_even_amount_long: -500,
+                ..Amm::default()
+            },
+            ..PerpMarket::default()
+        };
+
+        let realized_pnl =
+            update_position_and_market(&mut position, &delta(2, -220), &mut perp_market);
+
+        assert_eq!(realized_pnl, Ok(0));
+        assert_eq!(position.quote_entry_amount, -720);
+        assert_eq!(perp_market.amm.quote_entry_amount_long, -720);
+        assert_eq!(perp_market.amm.quote_entry_amount_short, 0);
+        assert_eq!(perp_market.amm.quote_break_even_amount_long, -720);
+        assert_eq!(perp_market.amm.quote_break_even_amount_short, 0);
+    }
+
+    #[test]
+    fn update_position_and_market_close_long_updates_amm_quote_aggregates() {
+        let mut position = position_with_amounts(5, -500, -500, -500);
+        let mut perp_market = PerpMarket {
+            amm: Amm {
+                order_step_size: 1,
+                quote_entry_amount_long: -500,
+                quote_break_even_amount_long: -500,
+                ..Amm::default()
+            },
+            ..PerpMarket::default()
+        };
+
+        let realized_pnl =
+            update_position_and_market(&mut position, &delta(-5, 500), &mut perp_market);
+
+        assert_eq!(realized_pnl, Ok(0));
+        assert_eq!(perp_market.amm.quote_entry_amount_long, 0);
+        assert_eq!(perp_market.amm.quote_entry_amount_short, 0);
+        assert_eq!(perp_market.amm.quote_break_even_amount_long, 0);
+        assert_eq!(perp_market.amm.quote_break_even_amount_short, 0);
+    }
+
+    #[test]
+    fn update_position_and_market_flip_long_to_short_updates_amm_quote_aggregates() {
+        let mut position = position_with_amounts(5, -500, -500, -500);
+        let mut perp_market = PerpMarket {
+            amm: Amm {
+                order_step_size: 1,
+                quote_entry_amount_long: -500,
+                quote_break_even_amount_long: -500,
+                ..Amm::default()
+            },
+            ..PerpMarket::default()
+        };
+
+        let realized_pnl =
+            update_position_and_market(&mut position, &delta(-8, 880), &mut perp_market);
+
+        assert_eq!(realized_pnl, Ok(50));
+        assert_eq!(perp_market.amm.quote_entry_amount_long, 0);
+        assert_eq!(perp_market.amm.quote_entry_amount_short, 330);
+        assert_eq!(perp_market.amm.quote_break_even_amount_long, 0);
+        assert_eq!(perp_market.amm.quote_break_even_amount_short, 330);
     }
 
     #[test]

@@ -1,4 +1,5 @@
 use crate::state::order_params::OrderParams;
+use crate::state::perp_market::PerpMarket;
 use crate::state::user::User;
 use anchor_lang::prelude::*;
 use instructions::*;
@@ -30,6 +31,28 @@ pub mod mini_drift {
     pub fn place_perp_order(ctx: Context<PlacePerpOrder>, order_params: OrderParams) -> Result<()> {
         handle_place_perp_order(ctx, order_params)
     }
+
+    pub fn fill_perp_order(
+        ctx: Context<FillPerpOrder>,
+        order_index: u8,
+        position_index: u8,
+    ) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let taker = ctx.accounts.user.key();
+        let filler = ctx.accounts.filler.key();
+
+        handle_fill_perp_order_amm(
+            ctx.accounts.user.as_mut(),
+            taker,
+            filler,
+            order_index as usize,
+            position_index as usize,
+            ctx.accounts.market.as_mut(),
+            now,
+        )?;
+
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -46,4 +69,19 @@ pub struct InitializeUser<'info> {
     pub user: Account<'info, User>,
 
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct FillPerpOrder<'info> {
+    #[account(mut)]
+    pub filler: Signer<'info>,
+
+    #[account(mut, has_one = authority)]
+    pub user: Box<Account<'info, User>>,
+
+    /// CHECK: safe - authority verified through user account
+    pub authority: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    pub market: Box<Account<'info, PerpMarket>>,
 }

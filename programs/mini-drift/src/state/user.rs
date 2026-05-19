@@ -283,8 +283,7 @@ impl Order {
     }
 }
 
-#[account]
-#[derive(PartialEq, Debug, Eq, Default, InitSpace)]
+#[derive(AnchorSerialize, AnchorDeserialize, PartialEq, Debug, Eq, Default, Clone, InitSpace)]
 pub struct User {
     pub authority: Pubkey,
 
@@ -295,6 +294,67 @@ pub struct User {
     pub next_order_id: u32,
 
     pub open_orders: u8,
+}
+
+impl anchor_lang::Discriminator for User {
+    const DISCRIMINATOR: &'static [u8] = &[159, 117, 95, 227, 239, 151, 58, 236];
+}
+
+impl anchor_lang::Owner for User {
+    fn owner() -> Pubkey {
+        crate::ID
+    }
+}
+
+impl anchor_lang::AccountSerialize for User {
+    fn try_serialize<W: std::io::Write>(&self, writer: &mut W) -> anchor_lang::Result<()> {
+        writer.write_all(Self::DISCRIMINATOR)?;
+        AnchorSerialize::serialize(self, writer)?;
+        Ok(())
+    }
+}
+
+impl anchor_lang::AccountDeserialize for User {
+    fn try_deserialize(buf: &mut &[u8]) -> anchor_lang::Result<Self> {
+        if buf.len() < Self::DISCRIMINATOR.len() {
+            return Err(anchor_lang::error::ErrorCode::AccountDiscriminatorNotFound.into());
+        }
+
+        let given_discriminator = &buf[..Self::DISCRIMINATOR.len()];
+        if given_discriminator != Self::DISCRIMINATOR {
+            return Err(anchor_lang::error!(
+                anchor_lang::error::ErrorCode::AccountDiscriminatorMismatch
+            )
+            .with_account_name("User"));
+        }
+
+        Self::try_deserialize_unchecked(buf)
+    }
+
+    fn try_deserialize_unchecked(buf: &mut &[u8]) -> anchor_lang::Result<Self> {
+        let mut data: &[u8] = &buf[Self::DISCRIMINATOR.len()..];
+        let mut user = Box::new(User::default());
+
+        user.authority = Pubkey::deserialize(&mut data)
+            .map_err(|_| anchor_lang::error::ErrorCode::AccountDidNotDeserialize)?;
+
+        for position in user.perp_positions.iter_mut() {
+            *position = PerpPosition::deserialize(&mut data)
+                .map_err(|_| anchor_lang::error::ErrorCode::AccountDidNotDeserialize)?;
+        }
+
+        for order in user.orders.iter_mut() {
+            *order = Order::deserialize(&mut data)
+                .map_err(|_| anchor_lang::error::ErrorCode::AccountDidNotDeserialize)?;
+        }
+
+        user.next_order_id = u32::deserialize(&mut data)
+            .map_err(|_| anchor_lang::error::ErrorCode::AccountDidNotDeserialize)?;
+        user.open_orders = u8::deserialize(&mut data)
+            .map_err(|_| anchor_lang::error::ErrorCode::AccountDidNotDeserialize)?;
+
+        Ok(*user)
+    }
 }
 
 impl User {
@@ -463,6 +523,42 @@ mod tests {
         user.decrement_open_orders();
 
         assert_eq!(user.open_orders, 0);
+    }
+
+    #[test]
+    fn user_account_serialize_deserialize_roundtrip_preserves_fields() {
+        let mut user = User {
+            authority: Pubkey::new_unique(),
+            next_order_id: 42,
+            open_orders: 2,
+            ..User::default()
+        };
+        user.perp_positions[0].market_index = 3;
+        user.perp_positions[0].base_asset_amount = 5;
+        user.perp_positions[0].quote_asset_amount = -600;
+        user.perp_positions[0].quote_entry_amount = -500;
+        user.perp_positions[0].open_orders = 1;
+        user.orders[0] = Order {
+            order_id: 7,
+            market_index: 3,
+            direction: PositionDirection::Long,
+            order_type: OrderType::Limit,
+            status: OrderStatus::Open,
+            base_asset_amount: 5,
+            price: 120,
+            reduce_only: true,
+            slot: 99,
+            ..Order::default()
+        };
+
+        let mut data = Vec::new();
+        anchor_lang::AccountSerialize::try_serialize(&user, &mut data).unwrap();
+
+        let mut data_slice = data.as_slice();
+        let decoded =
+            <User as anchor_lang::AccountDeserialize>::try_deserialize(&mut data_slice).unwrap();
+
+        assert_eq!(decoded, user);
     }
 
     #[test]

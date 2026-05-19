@@ -27,6 +27,15 @@ pub enum ErrorCode {
 
     #[msg("Invalid AMM Detected")]
     InvalidAmmDetected,
+
+    #[msg("Invalid Order Status")]
+    InvalidOrderStatus,
+
+    #[msg("Invalid Market Account")]
+    InvalidMarketAccount,
+
+    #[msg("Invalid Fill Price")]
+    InvalidFillPrice,
 }
 
 pub type MiniDriftResult<T = ()> = Result<T, ErrorCode>;

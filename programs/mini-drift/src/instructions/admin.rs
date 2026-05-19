@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn initialize_perp_market_errors_on_terminal_quote_overflow() {
         let mut market = PerpMarket::default();
-        let original_market = market;
+        let original_market = market.clone();
 
         let result = initialize_perp_market(&mut market, 1, 100, 100, u128::MAX, 2, 1, 50, 150, 1);
 

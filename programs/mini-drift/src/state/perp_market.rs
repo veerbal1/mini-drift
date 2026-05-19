@@ -22,9 +22,8 @@ pub struct Amm {
     pub order_step_size: u64,
 }
 
-#[derive(
-    AnchorSerialize, AnchorDeserialize, Default, Debug, PartialEq, Eq, Clone, Copy, InitSpace,
-)]
+#[account]
+#[derive(Default, Debug, PartialEq, Eq, InitSpace)]
 pub struct PerpMarket {
     pub number_of_users: u32,
     pub number_of_users_with_base: u32,
