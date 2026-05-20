@@ -107,6 +107,109 @@ mod tests {
         }
     }
 
+    fn amm_with_bounds(
+        base_asset_reserve: u128,
+        quote_asset_reserve: u128,
+        min_base_asset_reserve: u128,
+        max_base_asset_reserve: u128,
+    ) -> Amm {
+        Amm {
+            base_asset_reserve,
+            quote_asset_reserve,
+            min_base_asset_reserve,
+            max_base_asset_reserve,
+            ..Amm::default()
+        }
+    }
+
+    #[test]
+    fn update_amm_reserves_subtract_vector_buy_long() {
+        let mut amm = amm_with_bounds(1000, 1000, 1, 2000);
+
+        let quote_asset_amount = update_amm_reserves(&mut amm, 100, SwapDirection::Subtract);
+
+        assert_eq!(quote_asset_amount, Ok(111));
+        assert_eq!(amm.base_asset_reserve, 900);
+        assert_eq!(amm.quote_asset_reserve, 1111);
+    }
+
+    #[test]
+    fn update_amm_reserves_add_vector_sell_short() {
+        let mut amm = amm_with_bounds(1000, 1000, 1, 2000);
+
+        let quote_asset_amount = update_amm_reserves(&mut amm, 100, SwapDirection::Add);
+
+        assert_eq!(quote_asset_amount, Ok(91));
+        assert_eq!(amm.base_asset_reserve, 1100);
+        assert_eq!(amm.quote_asset_reserve, 909);
+    }
+
+    #[test]
+    fn update_amm_reserves_succeeds_at_exact_min_base_bound() {
+        let mut amm = amm_with_bounds(100, 100, 50, 150);
+
+        let quote_asset_amount = update_amm_reserves(&mut amm, 50, SwapDirection::Subtract);
+
+        assert_eq!(quote_asset_amount, Ok(100));
+        assert_eq!(amm.base_asset_reserve, 50);
+        assert_eq!(amm.quote_asset_reserve, 200);
+    }
+
+    #[test]
+    fn update_amm_reserves_succeeds_at_exact_max_base_bound() {
+        let mut amm = amm_with_bounds(100, 100, 50, 150);
+
+        let quote_asset_amount = update_amm_reserves(&mut amm, 50, SwapDirection::Add);
+
+        assert_eq!(quote_asset_amount, Ok(34));
+        assert_eq!(amm.base_asset_reserve, 150);
+        assert_eq!(amm.quote_asset_reserve, 66);
+    }
+
+    #[test]
+    fn update_amm_reserves_rejects_below_min_base_without_mutation() {
+        let mut amm = amm_with_bounds(100, 100, 50, 150);
+        let original_amm = amm;
+
+        let quote_asset_amount = update_amm_reserves(&mut amm, 51, SwapDirection::Subtract);
+
+        assert_eq!(quote_asset_amount, Err(ErrorCode::InvalidAmmDetected));
+        assert_eq!(amm, original_amm);
+    }
+
+    #[test]
+    fn update_amm_reserves_rejects_above_max_base_without_mutation() {
+        let mut amm = amm_with_bounds(100, 100, 50, 150);
+        let original_amm = amm;
+
+        let quote_asset_amount = update_amm_reserves(&mut amm, 51, SwapDirection::Add);
+
+        assert_eq!(quote_asset_amount, Err(ErrorCode::InvalidAmmDetected));
+        assert_eq!(amm, original_amm);
+    }
+
+    #[test]
+    fn update_amm_reserves_rejects_zero_quote_reserve_without_mutation() {
+        let mut amm = amm_with_bounds(100, 0, 50, 150);
+        let original_amm = amm;
+
+        let quote_asset_amount = update_amm_reserves(&mut amm, 10, SwapDirection::Add);
+
+        assert_eq!(quote_asset_amount, Err(ErrorCode::InvalidAmmDetected));
+        assert_eq!(amm, original_amm);
+    }
+
+    #[test]
+    fn update_amm_reserves_rejects_invariant_overflow_without_mutation() {
+        let mut amm = amm_with_bounds(u128::MAX, 2, 1, u128::MAX);
+        let original_amm = amm;
+
+        let quote_asset_amount = update_amm_reserves(&mut amm, 1, SwapDirection::Subtract);
+
+        assert_eq!(quote_asset_amount, Err(ErrorCode::MathError));
+        assert_eq!(amm, original_amm);
+    }
+
     #[test]
     fn swap_base_asset_add_returns_quote_delta() {
         let quote_asset_amount = swap_base_asset(&amm(), 25, SwapDirection::Add);
