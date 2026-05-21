@@ -45,6 +45,9 @@ pub enum ErrorCode {
 
     #[msg("Oracle data has insufficient data points")]
     OracleInvalid,
+
+    #[msg("Mark price diverges too far from oracle")]
+    OracleMarkTooDivergent,
 }
 
 pub type MiniDriftResult<T = ()> = Result<T, ErrorCode>;

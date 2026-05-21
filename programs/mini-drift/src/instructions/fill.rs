@@ -5,9 +5,9 @@ use crate::{
     },
     error::{ErrorCode, MiniDriftResult},
     math::{
-        amm::{swap_base_asset, update_amm_reserves, SwapDirection},
+        amm::{calculate_mark_price, swap_base_asset, update_amm_reserves, SwapDirection},
         constants::BASE_DECIMALS,
-        oracle::is_oracle_valid,
+        oracle::{is_oracle_valid, validate_mark_oracle_divergence},
         orders::calculate_quote_asset_amount_for_maker_order,
     },
     state::{
@@ -84,6 +84,8 @@ pub fn handle_fill_perp_order_amm(
         market.oracle_max_delay,
         market.oracle_max_confidence,
     )?;
+    let mark_price = calculate_mark_price(&market.amm)?;
+    validate_mark_oracle_divergence(mark_price, oracle_price_data)?;
 
     let base_asset_amount = order.get_base_asset_amount_unfilled(None)?;
     let order_direction = order.direction;
@@ -165,9 +167,12 @@ pub fn handle_fill_perp_order_amm(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{
-        perp_market::Amm,
-        user::{Order, OrderType, PerpPosition},
+    use crate::{
+        math::constants::{PEG_PRECISION, PRICE_PRECISION},
+        state::{
+            perp_market::Amm,
+            user::{Order, OrderType, PerpPosition},
+        },
     };
 
     fn test_market(market_index: u16) -> PerpMarket {
@@ -176,6 +181,7 @@ mod tests {
             amm: Amm {
                 base_asset_reserve: 100,
                 quote_asset_reserve: 100,
+                peg_multiplier: PEG_PRECISION,
                 min_base_asset_reserve: 50,
                 max_base_asset_reserve: 150,
                 order_step_size: 1,
@@ -187,7 +193,7 @@ mod tests {
 
     fn valid_oracle_price_data() -> OraclePriceData {
         OraclePriceData {
-            price: 100,
+            price: i64::try_from(PRICE_PRECISION).unwrap(),
             confidence: 0,
             delay: 0,
             has_sufficient_number_of_data_points: true,
@@ -425,6 +431,37 @@ mod tests {
         );
 
         assert_eq!(result, Err(ErrorCode::OracleInvalid));
+        assert_eq!(market.amm, original_amm);
+        assert_eq!(user.orders[0].base_asset_amount_filled, 0);
+        assert_eq!(user.perp_positions[0].base_asset_amount, 0);
+        assert_eq!(user.perp_positions[0].open_bids, 20);
+    }
+
+    #[test]
+    fn handle_fill_perp_order_amm_rejects_divergent_mark_before_mutation() {
+        let mut user = User::default();
+        user.open_orders = 1;
+        user.orders[0] = open_order(0, PositionDirection::Long, 20);
+        user.perp_positions[0] = position_with_open_order(0, PositionDirection::Long, 20);
+        let mut market = test_market(0);
+        let original_amm = market.amm;
+        let divergent_oracle_price_data = OraclePriceData {
+            price: i64::try_from(PRICE_PRECISION / 2).unwrap(),
+            ..valid_oracle_price_data()
+        };
+
+        let result = handle_fill_perp_order_amm(
+            &mut user,
+            Pubkey::default(),
+            Pubkey::default(),
+            0,
+            0,
+            &mut market,
+            &divergent_oracle_price_data,
+            0,
+        );
+
+        assert_eq!(result, Err(ErrorCode::OracleMarkTooDivergent));
         assert_eq!(market.amm, original_amm);
         assert_eq!(user.orders[0].base_asset_amount_filled, 0);
         assert_eq!(user.perp_positions[0].base_asset_amount, 0);

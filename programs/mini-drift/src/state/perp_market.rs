@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::state::oracle::OracleSource;
+use crate::state::oracle::{OraclePriceData, OracleSource};
 
 #[derive(
     AnchorSerialize, AnchorDeserialize, Default, Debug, PartialEq, Eq, Clone, Copy, InitSpace,
@@ -35,4 +35,5 @@ pub struct PerpMarket {
     pub oracle_source: OracleSource,
     pub oracle_max_delay: i64,
     pub oracle_max_confidence: u64,
+    pub mock_oracle_price_data: OraclePriceData,
 }

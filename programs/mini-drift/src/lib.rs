@@ -37,10 +37,23 @@ pub mod mini_drift {
         order_index: u8,
         position_index: u8,
     ) -> Result<()> {
-        let _ = (&ctx, order_index, position_index);
+        let now = Clock::get()?.unix_timestamp;
+        let taker = ctx.accounts.user.key();
+        let filler = ctx.accounts.filler.key();
+        let oracle_price_data = ctx.accounts.market.mock_oracle_price_data;
 
-        // Public fill needs real oracle account decoding before it can call the controller.
-        err!(crate::error::ErrorCode::OracleInvalid)
+        handle_fill_perp_order_amm(
+            ctx.accounts.user.as_mut(),
+            taker,
+            filler,
+            order_index as usize,
+            position_index as usize,
+            ctx.accounts.market.as_mut(),
+            &oracle_price_data,
+            now,
+        )?;
+
+        Ok(())
     }
 }
 

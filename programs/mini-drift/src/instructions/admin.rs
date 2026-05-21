@@ -1,5 +1,7 @@
 use crate::{
     error::{ErrorCode, MiniDriftResult},
+    math::amm::calculate_mark_price,
+    state::oracle::OraclePriceData,
     state::perp_market::{Amm, PerpMarket},
 };
 
@@ -39,6 +41,14 @@ pub fn initialize_perp_market(
         max_base_asset_reserve,
         order_step_size,
     };
+    let mock_oracle_price = calculate_mark_price(&market.amm)?;
+    market.mock_oracle_price_data = OraclePriceData {
+        price: mock_oracle_price,
+        confidence: 0,
+        delay: 0,
+        has_sufficient_number_of_data_points: true,
+        sequence_id: 0,
+    };
 
     Ok(())
 }
@@ -71,6 +81,16 @@ mod tests {
         assert_eq!(market.amm.min_base_asset_reserve, 900);
         assert_eq!(market.amm.max_base_asset_reserve, 1_100);
         assert_eq!(market.amm.order_step_size, 5);
+        assert_eq!(
+            market.mock_oracle_price_data,
+            OraclePriceData {
+                price: 24,
+                confidence: 0,
+                delay: 0,
+                has_sufficient_number_of_data_points: true,
+                sequence_id: 0,
+            }
+        );
     }
 
     #[test]

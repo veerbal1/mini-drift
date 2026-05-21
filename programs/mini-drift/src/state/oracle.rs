@@ -9,7 +9,9 @@ pub enum OracleSource {
     Switchboard,
 }
 
-#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(
+    AnchorSerialize, AnchorDeserialize, Default, Debug, PartialEq, Eq, Clone, Copy, InitSpace,
+)]
 pub struct OraclePriceData {
     pub price: i64,
     pub confidence: u64,

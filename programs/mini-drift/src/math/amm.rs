@@ -1,6 +1,9 @@
 use crate::{
     error::{ErrorCode, MiniDriftResult},
-    math::safe_math::SafeMath,
+    math::{
+        constants::{PEG_PRECISION, PRICE_PRECISION},
+        safe_math::SafeMath,
+    },
     state::perp_market::Amm,
 };
 
@@ -8,6 +11,21 @@ use crate::{
 pub enum SwapDirection {
     Add,
     Subtract,
+}
+
+pub fn calculate_mark_price(amm: &Amm) -> MiniDriftResult<i64> {
+    if amm.base_asset_reserve == 0 || amm.quote_asset_reserve == 0 || amm.peg_multiplier == 0 {
+        return Err(ErrorCode::InvalidAmmDetected);
+    }
+
+    let mark_price = amm
+        .quote_asset_reserve
+        .safe_mul(amm.peg_multiplier)?
+        .safe_mul(PRICE_PRECISION)?
+        .safe_div(PEG_PRECISION)?
+        .safe_div(amm.base_asset_reserve)?;
+
+    i64::try_from(mark_price).map_err(|_| ErrorCode::MathError)
 }
 
 pub fn swap_base_asset(
@@ -101,6 +119,7 @@ mod tests {
         Amm {
             base_asset_reserve: 100,
             quote_asset_reserve: 100,
+            peg_multiplier: PEG_PRECISION,
             min_base_asset_reserve: 50,
             max_base_asset_reserve: 150,
             ..Amm::default()
@@ -116,10 +135,39 @@ mod tests {
         Amm {
             base_asset_reserve,
             quote_asset_reserve,
+            peg_multiplier: PEG_PRECISION,
             min_base_asset_reserve,
             max_base_asset_reserve,
             ..Amm::default()
         }
+    }
+
+    #[test]
+    fn calculate_mark_price_uses_reserves_and_peg() {
+        let amm = Amm {
+            base_asset_reserve: 100,
+            quote_asset_reserve: 120,
+            peg_multiplier: PEG_PRECISION,
+            ..Amm::default()
+        };
+
+        let mark_price = calculate_mark_price(&amm);
+
+        assert_eq!(mark_price, Ok(1_200_000));
+    }
+
+    #[test]
+    fn calculate_mark_price_rejects_invalid_amm() {
+        let amm = Amm {
+            base_asset_reserve: 0,
+            quote_asset_reserve: 120,
+            peg_multiplier: PEG_PRECISION,
+            ..Amm::default()
+        };
+
+        let mark_price = calculate_mark_price(&amm);
+
+        assert_eq!(mark_price, Err(ErrorCode::InvalidAmmDetected));
     }
 
     #[test]
