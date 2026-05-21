@@ -44,3 +44,44 @@ pub fn apply_spread_to_quote(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn calculate_spread_returns_stored_values() {
+        let amm = Amm {
+            base_spread: 100,
+            max_spread: 500,
+            long_spread: 200,
+            short_spread: 300,
+            ..Amm::default()
+        };
+
+        let result = calculate_spread(&amm);
+
+        assert_eq!(result, Ok((200, 300)));
+    }
+
+    #[test]
+    fn apply_spread_long_adds_to_quote() {
+        let result = apply_spread_to_quote(1000, 50_000, 0, PositionDirection::Long);
+
+        assert_eq!(result, Ok(1050));
+    }
+
+    #[test]
+    fn apply_spread_short_subtracts_from_quote() {
+        let result = apply_spread_to_quote(1000, 0, 50_000, PositionDirection::Short);
+
+        assert_eq!(result, Ok(950));
+    }
+
+    #[test]
+    fn apply_spread_zero_changes_nothing() {
+        let result = apply_spread_to_quote(1000, 0, 0, PositionDirection::Long);
+
+        assert_eq!(result, Ok(1000));
+    }
+}

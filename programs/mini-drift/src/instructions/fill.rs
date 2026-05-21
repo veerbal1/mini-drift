@@ -1,11 +1,11 @@
 use crate::{
     controller::{
         orders::update_order_after_fill,
-        position::{PositionDelta, decrease_open_bids_and_asks, update_position_and_market},
+        position::{decrease_open_bids_and_asks, update_position_and_market, PositionDelta},
     },
     error::{ErrorCode, MiniDriftResult},
     math::{
-        amm::{self, SwapDirection, calculate_mark_price, swap_base_asset, update_amm_reserves},
+        amm::{calculate_mark_price, swap_base_asset, update_amm_reserves, SwapDirection},
         amm_spread::{apply_spread_to_quote, calculate_spread},
         constants::BASE_DECIMALS,
         oracle::{is_oracle_valid, validate_mark_oracle_divergence},
@@ -98,7 +98,8 @@ pub fn handle_fill_perp_order_amm(
 
     let quote_delta = swap_base_asset(&market.amm, base_asset_amount, swap_direction)?;
     let (long_spread, short_spread) = calculate_spread(&market.amm)?;
-    let quote_with_spread = apply_spread_to_quote(quote_delta, long_spread, short_spread, order_direction)?;
+    let quote_with_spread =
+        apply_spread_to_quote(quote_delta, long_spread, short_spread, order_direction)?;
     let base_asset_amount_i64 =
         i64::try_from(base_asset_amount).map_err(|_| ErrorCode::MathError)?;
     let quote_delta_i64 = i64::try_from(quote_with_spread).map_err(|_| ErrorCode::MathError)?;
@@ -139,7 +140,8 @@ pub fn handle_fill_perp_order_amm(
     )?;
 
     let mut order_after_fill = order;
-    let is_filled = update_order_after_fill(&mut order_after_fill, base_asset_amount, quote_with_spread)?;
+    let is_filled =
+        update_order_after_fill(&mut order_after_fill, base_asset_amount, quote_with_spread)?;
     let mut open_orders_after_fill = taker_user.open_orders;
     if is_filled {
         position_after_fill.open_orders = position_after_fill
