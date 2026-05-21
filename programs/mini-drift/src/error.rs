@@ -36,6 +36,15 @@ pub enum ErrorCode {
 
     #[msg("Invalid Fill Price")]
     InvalidFillPrice,
+
+    #[msg("Oracle data is stale")]
+    OracleStale,
+
+    #[msg("Oracle confidence interval exceeds acceptable range")]
+    OracleInsufficientConfidence,
+
+    #[msg("Oracle data has insufficient data points")]
+    OracleInvalid,
 }
 
 pub type MiniDriftResult<T = ()> = Result<T, ErrorCode>;

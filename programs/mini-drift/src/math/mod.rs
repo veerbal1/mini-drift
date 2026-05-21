@@ -2,6 +2,7 @@ pub mod amm;
 pub mod auction;
 pub mod constants;
 pub mod matching;
+pub mod oracle;
 pub mod orders;
 pub mod position;
 pub mod safe_math;

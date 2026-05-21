@@ -7,11 +7,13 @@ use crate::{
     math::{
         amm::{swap_base_asset, update_amm_reserves, SwapDirection},
         constants::BASE_DECIMALS,
+        oracle::is_oracle_valid,
         orders::calculate_quote_asset_amount_for_maker_order,
     },
     state::{
         events::get_order_action_record,
         fill_mode::FillMode,
+        oracle::OraclePriceData,
         perp_market::PerpMarket,
         user::{OrderStatus, PositionDirection, User},
     },
@@ -46,6 +48,7 @@ fn validate_amm_fill_price(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn handle_fill_perp_order_amm(
     taker_user: &mut User,
     taker: Pubkey,
@@ -53,6 +56,7 @@ pub fn handle_fill_perp_order_amm(
     taker_order_index: usize,
     taker_position_index: usize,
     market: &mut PerpMarket,
+    oracle_price_data: &OraclePriceData,
     now: i64,
 ) -> MiniDriftResult<()> {
     let order = *taker_user
@@ -74,6 +78,12 @@ pub fn handle_fill_perp_order_amm(
     if !position.is_for(order.market_index) {
         return Err(ErrorCode::InvalidPerpPositionDetected);
     }
+
+    is_oracle_valid(
+        oracle_price_data,
+        market.oracle_max_delay,
+        market.oracle_max_confidence,
+    )?;
 
     let base_asset_amount = order.get_base_asset_amount_unfilled(None)?;
     let order_direction = order.direction;
@@ -175,6 +185,16 @@ mod tests {
         }
     }
 
+    fn valid_oracle_price_data() -> OraclePriceData {
+        OraclePriceData {
+            price: 100,
+            confidence: 0,
+            delay: 0,
+            has_sufficient_number_of_data_points: true,
+            sequence_id: 1,
+        }
+    }
+
     fn open_order(
         market_index: u16,
         direction: PositionDirection,
@@ -249,6 +269,7 @@ mod tests {
             0,
             0,
             &mut market,
+            &valid_oracle_price_data(),
             0,
         );
 
@@ -280,6 +301,7 @@ mod tests {
             0,
             0,
             &mut market,
+            &valid_oracle_price_data(),
             0,
         );
 
@@ -313,6 +335,7 @@ mod tests {
             0,
             0,
             &mut market,
+            &valid_oracle_price_data(),
             0,
         );
 
@@ -339,6 +362,7 @@ mod tests {
             0,
             0,
             &mut market,
+            &valid_oracle_price_data(),
             0,
         );
 
@@ -365,10 +389,42 @@ mod tests {
             0,
             0,
             &mut market,
+            &valid_oracle_price_data(),
             0,
         );
 
         assert_eq!(result, Err(ErrorCode::InvalidPerpPositionDetected));
+        assert_eq!(market.amm, original_amm);
+        assert_eq!(user.orders[0].base_asset_amount_filled, 0);
+        assert_eq!(user.perp_positions[0].base_asset_amount, 0);
+        assert_eq!(user.perp_positions[0].open_bids, 20);
+    }
+
+    #[test]
+    fn handle_fill_perp_order_amm_rejects_invalid_oracle_before_mutation() {
+        let mut user = User::default();
+        user.open_orders = 1;
+        user.orders[0] = open_order(0, PositionDirection::Long, 20);
+        user.perp_positions[0] = position_with_open_order(0, PositionDirection::Long, 20);
+        let mut market = test_market(0);
+        let original_amm = market.amm;
+        let invalid_oracle_price_data = OraclePriceData {
+            has_sufficient_number_of_data_points: false,
+            ..valid_oracle_price_data()
+        };
+
+        let result = handle_fill_perp_order_amm(
+            &mut user,
+            Pubkey::default(),
+            Pubkey::default(),
+            0,
+            0,
+            &mut market,
+            &invalid_oracle_price_data,
+            0,
+        );
+
+        assert_eq!(result, Err(ErrorCode::OracleInvalid));
         assert_eq!(market.amm, original_amm);
         assert_eq!(user.orders[0].base_asset_amount_filled, 0);
         assert_eq!(user.perp_positions[0].base_asset_amount, 0);
@@ -392,6 +448,7 @@ mod tests {
             0,
             0,
             &mut market,
+            &valid_oracle_price_data(),
             0,
         );
 
@@ -419,6 +476,7 @@ mod tests {
             0,
             0,
             &mut market,
+            &valid_oracle_price_data(),
             0,
         );
 

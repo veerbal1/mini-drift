@@ -37,21 +37,10 @@ pub mod mini_drift {
         order_index: u8,
         position_index: u8,
     ) -> Result<()> {
-        let now = Clock::get()?.unix_timestamp;
-        let taker = ctx.accounts.user.key();
-        let filler = ctx.accounts.filler.key();
+        let _ = (&ctx, order_index, position_index);
 
-        handle_fill_perp_order_amm(
-            ctx.accounts.user.as_mut(),
-            taker,
-            filler,
-            order_index as usize,
-            position_index as usize,
-            ctx.accounts.market.as_mut(),
-            now,
-        )?;
-
-        Ok(())
+        // Public fill needs real oracle account decoding before it can call the controller.
+        err!(crate::error::ErrorCode::OracleInvalid)
     }
 }
 

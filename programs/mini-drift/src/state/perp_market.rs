@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
 
+use crate::state::oracle::OracleSource;
+
 #[derive(
     AnchorSerialize, AnchorDeserialize, Default, Debug, PartialEq, Eq, Clone, Copy, InitSpace,
 )]
@@ -29,4 +31,8 @@ pub struct PerpMarket {
     pub number_of_users_with_base: u32,
     pub market_index: u16,
     pub amm: Amm,
+    pub oracle: Pubkey,
+    pub oracle_source: OracleSource,
+    pub oracle_max_delay: i64,
+    pub oracle_max_confidence: u64,
 }
