@@ -22,6 +22,10 @@ pub struct Amm {
     pub min_base_asset_reserve: u128,
     pub max_base_asset_reserve: u128,
     pub order_step_size: u64,
+    pub base_spread: u32,
+    pub max_spread: u32,
+    pub long_spread: u32,
+    pub short_spread: u32,
 }
 
 #[account]

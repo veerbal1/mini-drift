@@ -40,6 +40,10 @@ pub fn initialize_perp_market(
         min_base_asset_reserve,
         max_base_asset_reserve,
         order_step_size,
+        base_spread: 0,
+        max_spread: 0,
+        long_spread: 0,
+        short_spread: 0,
     };
     let mock_oracle_price = calculate_mark_price(&market.amm)?;
     market.mock_oracle_price_data = OraclePriceData {
