@@ -26,6 +26,11 @@ pub struct Amm {
     pub max_spread: u32,
     pub long_spread: u32,
     pub short_spread: u32,
+    pub mark_std: u64,
+    pub oracle_std: u64,
+    pub long_intensity_volume: u64,
+    pub short_intensity_volume: u64,
+    pub volume_24h: u64,
 }
 
 #[account]

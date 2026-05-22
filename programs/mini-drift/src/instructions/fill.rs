@@ -7,7 +7,7 @@ use crate::{
     math::{
         amm::{calculate_mark_price, swap_base_asset, update_amm_reserves, SwapDirection},
         amm_spread::{apply_spread_to_quote, calculate_spread},
-        constants::BASE_DECIMALS,
+        constants::{BASE_DECIMALS, PRICE_PRECISION},
         oracle::{is_oracle_valid, validate_mark_oracle_divergence},
         orders::calculate_quote_asset_amount_for_maker_order,
     },
@@ -97,7 +97,30 @@ pub fn handle_fill_perp_order_amm(
     };
 
     let quote_delta = swap_base_asset(&market.amm, base_asset_amount, swap_direction)?;
-    let (long_spread, short_spread) = calculate_spread(&market.amm)?;
+    let reserve_price = u64::try_from(mark_price).map_err(|_| ErrorCode::MathError)?;
+    let oracle_price = u128::try_from(oracle_price_data.price).map_err(|_| ErrorCode::MathError)?;
+    let oracle_conf_pct = u64::try_from(
+        u128::from(oracle_price_data.confidence)
+            .checked_mul(PRICE_PRECISION)
+            .ok_or(ErrorCode::MathError)?
+            .checked_div(oracle_price)
+            .ok_or(ErrorCode::MathError)?,
+    )
+    .map_err(|_| ErrorCode::MathError)?;
+    let (long_spread, short_spread) = calculate_spread(
+        market.amm.base_spread,
+        market.amm.max_spread,
+        market.amm.base_asset_amount_with_amm,
+        reserve_price,
+        oracle_conf_pct,
+        market.amm.mark_std,
+        market.amm.oracle_std,
+        market.amm.long_intensity_volume,
+        market.amm.short_intensity_volume,
+        market.amm.volume_24h,
+        market.amm.base_asset_amount_long,
+        market.amm.base_asset_amount_short,
+    )?;
     let quote_with_spread =
         apply_spread_to_quote(quote_delta, long_spread, short_spread, order_direction)?;
     let base_asset_amount_i64 =

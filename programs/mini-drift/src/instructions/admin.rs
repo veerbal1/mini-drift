@@ -44,6 +44,11 @@ pub fn initialize_perp_market(
         max_spread: 0,
         long_spread: 0,
         short_spread: 0,
+        mark_std: 0,
+        oracle_std: 0,
+        long_intensity_volume: 0,
+        short_intensity_volume: 0,
+        volume_24h: 0,
     };
     let mock_oracle_price = calculate_mark_price(&market.amm)?;
     market.mock_oracle_price_data = OraclePriceData {
